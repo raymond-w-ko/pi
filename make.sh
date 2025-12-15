@@ -4,4 +4,3 @@ npm install
 npm run build
 cd packages/coding-agent
 npm run build:binary
-mkdir $HOME/bin
