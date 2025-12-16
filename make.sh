@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -exu
-npm install
+npm ci
 npm run build
 cd packages/coding-agent
 npm run build:binary
