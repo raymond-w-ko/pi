@@ -2,5 +2,7 @@
 set -exu
 npm ci
 npm run build
-cd packages/coding-agent
+pushd packages/coding-agent
 npm run build:binary
+popd
+git checkout upstream/main -- packages/ai/src/models.generated.ts
