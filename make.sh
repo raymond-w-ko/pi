@@ -8,4 +8,7 @@ pushd packages/coding-agent
 npm run build
 popd
 git checkout -- packages/ai/src/models.generated.ts
-"$SCRIPT_DIR/packages/coding-agent/dist/cli.js" install npm:@ff-labs/pi-fff
+PI="$SCRIPT_DIR/packages/coding-agent/dist/cli.js"
+"$PI" install npm:pi-powerline-footer
+"$PI" install npm:pi-intercom
+"$PI" install npm:@ff-labs/pi-fff
