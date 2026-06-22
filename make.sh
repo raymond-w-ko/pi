@@ -12,3 +12,4 @@ PI="$SCRIPT_DIR/packages/coding-agent/dist/cli.js"
 "$PI" install npm:pi-powerline-footer
 "$PI" install npm:pi-intercom
 "$PI" install npm:@ff-labs/pi-fff
+"$PI" update --extensions
