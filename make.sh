@@ -3,6 +3,7 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 set -exu
 git restore packages/ai/src/providers/openrouter.models.ts
 git restore packages/ai/src/image-models.generated.ts
+git restore packages/ai/src/providers/*.models.ts
 git clean -fxd
 npm ci
 npm run build
