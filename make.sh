@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 set -exu
+PI_CODING_AGENT_DIR=$(CDPATH= cd -- "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}" && pwd -P)
+export PI_CODING_AGENT_DIR
+NPM_INSTALL_ROOT="$PI_CODING_AGENT_DIR/npm"
+NPM_PACKAGE_LOCK="$NPM_INSTALL_ROOT/package-lock.json"
+if [[ -f "$NPM_PACKAGE_LOCK" ]] && grep -Eq '^[[:space:]]+"(\.\./)+' "$NPM_PACKAGE_LOCK"; then
+	rm -f "$NPM_PACKAGE_LOCK" "$NPM_INSTALL_ROOT/node_modules/.package-lock.json"
+fi
 git restore packages/ai/src/providers/openrouter.models.ts
 git restore packages/ai/src/image-models.generated.ts
 git restore packages/ai/src/providers/*.models.ts
@@ -49,4 +56,5 @@ fi
 "$PI" install npm:pi-powerline-footer
 "$PI" install npm:pi-intercom
 "$PI" install npm:@ff-labs/pi-fff
+npm rebuild esbuild --prefix "$NPM_INSTALL_ROOT"
 "$PI" update --extensions
