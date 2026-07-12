@@ -60,3 +60,21 @@ fi
 npm rebuild esbuild --prefix "$NPM_INSTALL_ROOT"
 "$PI" update --extensions
 restore_generated_models
+node - "$PI_CODING_AGENT_DIR/settings.json" <<'NODE'
+const fs = require("node:fs");
+const settingsPath = process.argv[2];
+const settings = fs.existsSync(settingsPath)
+	? JSON.parse(fs.readFileSync(settingsPath, "utf8"))
+	: {};
+if (settings === null || typeof settings !== "object" || Array.isArray(settings)) {
+	throw new Error(`${settingsPath} must contain a JSON object`);
+}
+const existingPowerline = settings.powerline;
+settings.powerline = existingPowerline !== null && typeof existingPowerline === "object" && !Array.isArray(existingPowerline)
+	? { ...existingPowerline, welcome: false }
+	: typeof existingPowerline === "string"
+		? { preset: existingPowerline, welcome: false }
+		: { welcome: false };
+fs.mkdirSync(require("node:path").dirname(settingsPath), { recursive: true });
+fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
+NODE
