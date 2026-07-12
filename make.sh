@@ -57,6 +57,7 @@ fi
 "$PI" install npm:pi-powerline-footer
 "$PI" install npm:pi-intercom
 "$PI" install npm:@ff-labs/pi-fff
+"$PI" install npm:pi-goal
 npm rebuild esbuild --prefix "$NPM_INSTALL_ROOT"
 "$PI" update --extensions
 restore_generated_models
