@@ -8,13 +8,14 @@ NPM_PACKAGE_LOCK="$NPM_INSTALL_ROOT/package-lock.json"
 if [[ -f "$NPM_PACKAGE_LOCK" ]] && grep -Eq '^[[:space:]]+"(\.\./)+' "$NPM_PACKAGE_LOCK"; then
 	rm -f "$NPM_PACKAGE_LOCK" "$NPM_INSTALL_ROOT/node_modules/.package-lock.json"
 fi
-git restore packages/ai/src/providers/openrouter.models.ts
-git restore packages/ai/src/image-models.generated.ts
-git restore packages/ai/src/providers/*.models.ts
+restore_generated_models() {
+	git restore packages/ai/src/models.generated.ts
+	git restore packages/ai/src/image-models.generated.ts
+	git restore packages/ai/src/providers/*.models.ts
+}
 git clean -fxd
 npm ci
 npm run build
-git checkout -- packages/ai/src/models.generated.ts
 case "$(uname -s)-$(uname -m)" in
 Darwin-arm64)
 	BINARY_PLATFORM=darwin-arm64
@@ -58,3 +59,4 @@ fi
 "$PI" install npm:@ff-labs/pi-fff
 npm rebuild esbuild --prefix "$NPM_INSTALL_ROOT"
 "$PI" update --extensions
+restore_generated_models
