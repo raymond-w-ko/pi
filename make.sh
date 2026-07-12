@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 set -exu
-PI_CODING_AGENT_DIR=$(CDPATH= cd -- "${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}" && pwd -P)
+PI_CODING_AGENT_DIR=${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}
+mkdir -p "$PI_CODING_AGENT_DIR"
+PI_CODING_AGENT_DIR=$(CDPATH= cd -- "$PI_CODING_AGENT_DIR" && pwd -P)
 export PI_CODING_AGENT_DIR
 NPM_INSTALL_ROOT="$PI_CODING_AGENT_DIR/npm"
 NPM_PACKAGE_LOCK="$NPM_INSTALL_ROOT/package-lock.json"
