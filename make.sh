@@ -63,6 +63,7 @@ fi
 "$PI" install npm:pi-intercom
 "$PI" install npm:@ff-labs/pi-fff
 "$PI" install npm:pi-goal
+"$PI" install npm:pi-interactive-shell
 npm rebuild esbuild --prefix "$NPM_INSTALL_ROOT"
 "$PI" update --extensions
 node - "$PI_CODING_AGENT_DIR/settings.json" <<'NODE'
