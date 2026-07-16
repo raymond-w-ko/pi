@@ -59,6 +59,26 @@ if [[ "$BINARY_PLATFORM" == windows-* ]]; then
 else
 	PI="$SCRIPT_DIR/packages/coding-agent/binaries/$BINARY_PLATFORM/pi"
 fi
+node - "$NPM_INSTALL_ROOT/package.json" <<'NODE'
+const fs = require("node:fs");
+const packageJsonPath = process.argv[2];
+const packageJson = fs.existsSync(packageJsonPath)
+	? JSON.parse(fs.readFileSync(packageJsonPath, "utf8"))
+	: { name: "pi-extensions", private: true };
+if (packageJson === null || typeof packageJson !== "object" || Array.isArray(packageJson)) {
+	throw new Error(`${packageJsonPath} must contain a JSON object`);
+}
+const existingAllowScripts = packageJson.allowScripts;
+packageJson.allowScripts = {
+	...(existingAllowScripts !== null && typeof existingAllowScripts === "object" && !Array.isArray(existingAllowScripts)
+		? existingAllowScripts
+		: {}),
+	esbuild: true,
+	fsevents: true,
+};
+fs.mkdirSync(require("node:path").dirname(packageJsonPath), { recursive: true });
+fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
+NODE
 "$PI" install npm:pi-powerline-footer
 "$PI" install npm:pi-intercom
 "$PI" install npm:@ff-labs/pi-fff
