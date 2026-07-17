@@ -17,10 +17,7 @@ restore_generated_models() {
 }
 git clean -fxd
 npm ci
-npm --prefix packages/tui run build
-npm exec -- tsgo -p packages/ai/tsconfig.build.json
-npm --prefix packages/agent run build
-npm --prefix packages/coding-agent run build
+npm run build
 case "$(uname -s)-$(uname -m)" in
 Darwin-arm64)
 	BINARY_PLATFORM=darwin-arm64
@@ -87,6 +84,7 @@ npm install --ignore-scripts --save-exact --prefix "$NPM_INSTALL_ROOT" @ff-labs/
 "$PI" install npm:pi-interactive-shell
 npm rebuild esbuild --prefix "$NPM_INSTALL_ROOT"
 "$PI" update --extensions
+restore_generated_models
 node - "$PI_CODING_AGENT_DIR/settings.json" <<'NODE'
 const fs = require("node:fs");
 const settingsPath = process.argv[2];
