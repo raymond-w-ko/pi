@@ -105,3 +105,17 @@ settings.powerline = existingPowerline !== null && typeof existingPowerline === 
 fs.mkdirSync(require("node:path").dirname(settingsPath), { recursive: true });
 fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
 NODE
+node - "$PI_CODING_AGENT_DIR/keybindings.json" <<'NODE'
+const fs = require("node:fs");
+const keybindingsPath = process.argv[2];
+const keybindings = fs.existsSync(keybindingsPath)
+	? JSON.parse(fs.readFileSync(keybindingsPath, "utf8"))
+	: {};
+if (keybindings === null || typeof keybindings !== "object" || Array.isArray(keybindings)) {
+	throw new Error(`${keybindingsPath} must contain a JSON object`);
+}
+keybindings["tui.input.submit"] = "alt+enter";
+keybindings["app.message.followUp"] = "enter";
+fs.mkdirSync(require("node:path").dirname(keybindingsPath), { recursive: true });
+fs.writeFileSync(keybindingsPath, `${JSON.stringify(keybindings, null, 2)}\n`);
+NODE
