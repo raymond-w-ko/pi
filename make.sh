@@ -118,12 +118,6 @@ fs.mkdirSync(require("node:path").dirname(keybindingsPath), { recursive: true })
 fs.writeFileSync(keybindingsPath, `${JSON.stringify(keybindings, null, 2)}\n`);
 NODE
 
-PI_INSTALL_DIR="$HOME/bin"
-PI_INSTALL_PATH="$PI_INSTALL_DIR/$(basename "$PI")"
+PI_INSTALL_DIR="$HOME/pi"
 mkdir -p "$PI_INSTALL_DIR"
-if [[ -L "$PI_INSTALL_PATH" ]]; then
-	rm "$PI_INSTALL_PATH"
-elif [[ -e "$PI_INSTALL_PATH" ]]; then
-	mv -f "$PI_INSTALL_PATH" "$PI_INSTALL_PATH.old"
-fi
-cp "$PI" "$PI_INSTALL_PATH"
+cp -R "$(dirname "$PI")/." "$PI_INSTALL_DIR/"
