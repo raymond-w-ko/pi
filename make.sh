@@ -98,10 +98,10 @@ if (settings === null || typeof settings !== "object" || Array.isArray(settings)
 }
 const existingPowerline = settings.powerline;
 settings.powerline = existingPowerline !== null && typeof existingPowerline === "object" && !Array.isArray(existingPowerline)
-	? { ...existingPowerline, welcome: false }
+	? { ...existingPowerline, welcome: false, fixedEditor: false }
 	: typeof existingPowerline === "string"
-		? { preset: existingPowerline, welcome: false }
-		: { welcome: false };
+		? { preset: existingPowerline, welcome: false, fixedEditor: false }
+		: { welcome: false, fixedEditor: false };
 fs.mkdirSync(require("node:path").dirname(settingsPath), { recursive: true });
 fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
 NODE
