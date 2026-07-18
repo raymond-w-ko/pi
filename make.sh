@@ -77,6 +77,7 @@ fs.mkdirSync(require("node:path").dirname(packageJsonPath), { recursive: true })
 fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
 NODE
 npm install --ignore-scripts --save-exact --prefix "$NPM_INSTALL_ROOT" @ff-labs/fff-bun
+"$PI" install npm:@juicesharp/rpiv-ask-user-question
 "$PI" install npm:@ff-labs/pi-fff
 "$PI" install npm:pi-goal
 "$PI" install npm:pi-powerline-footer
@@ -101,6 +102,10 @@ settings.powerline = existingPowerline !== null && typeof existingPowerline === 
 	: typeof existingPowerline === "string"
 		? { preset: existingPowerline, welcome: false, fixedEditor: false }
 		: { welcome: false, fixedEditor: false };
+const existingSubagents = settings.subagents;
+settings.subagents = existingSubagents !== null && typeof existingSubagents === "object" && !Array.isArray(existingSubagents)
+	? { ...existingSubagents, disableBuiltins: true }
+	: { disableBuiltins: true };
 fs.mkdirSync(require("node:path").dirname(settingsPath), { recursive: true });
 fs.writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
 NODE
