@@ -77,10 +77,11 @@ fs.mkdirSync(require("node:path").dirname(packageJsonPath), { recursive: true })
 fs.writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
 NODE
 npm install --ignore-scripts --save-exact --prefix "$NPM_INSTALL_ROOT" @ff-labs/fff-bun
-"$PI" install npm:pi-powerline-footer
-"$PI" install npm:pi-intercom
 "$PI" install npm:@ff-labs/pi-fff
 "$PI" install npm:pi-goal
+"$PI" install npm:pi-powerline-footer
+"$PI" install npm:pi-intercom
+"$PI" install npm:pi-subagents
 "$PI" install npm:pi-interactive-shell
 npm rebuild esbuild --prefix "$NPM_INSTALL_ROOT"
 "$PI" update --extensions
