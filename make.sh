@@ -84,6 +84,7 @@ npm install --ignore-scripts --save-exact --prefix "$NPM_INSTALL_ROOT" @ff-labs/
 "$PI" install npm:pi-intercom
 "$PI" install npm:pi-subagents
 "$PI" install npm:pi-interactive-shell
+"$PI" install npm:pi-tool-display
 npm rebuild esbuild --prefix "$NPM_INSTALL_ROOT"
 "$PI" update --extensions
 restore_generated_models
