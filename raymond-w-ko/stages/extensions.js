@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { isObject, readJsonObject, writeJson } from "../lib/json.js";
+import { getRemovalSource, readPackageSources } from "../lib/package-settings.js";
 import { run } from "../lib/process.js";
 
 const EXTENSIONS = [
@@ -25,9 +26,21 @@ export function installExtensions(context) {
 	for (const extension of EXTENSIONS) {
 		run(context.binaryPath, ["install", extension], context);
 	}
+	removeUnlistedPackages(context);
 	run("npm", ["rebuild", "esbuild", "--prefix", context.npmInstallRoot], context);
 	run(context.binaryPath, ["update", "--extensions"], context);
 	restoreGeneratedModels(context);
+}
+
+function removeUnlistedPackages(context) {
+	const desiredPackages = new Set(EXTENSIONS);
+	const settingsPath = join(context.agentDir, "settings.json");
+	const configuredPackages = new Set(readPackageSources(settingsPath));
+	for (const source of configuredPackages) {
+		if (!desiredPackages.has(source)) {
+			run(context.binaryPath, ["remove", getRemovalSource(source, context.agentDir)], context);
+		}
+	}
 }
 
 function repairExtensionPackageLock(npmInstallRoot) {

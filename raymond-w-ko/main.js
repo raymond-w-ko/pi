@@ -22,7 +22,7 @@ Stages:
   all         Run every stage in order
   workspace   Clean repository, install dependencies, and build packages
   binary      Build the standalone binary for this host
-  extensions  Install extension dependencies and Pi extensions
+  extensions  Strictly sync global Pi packages to the configured list
   config      Update Pi settings and keybindings
   install     Copy the standalone binary distribution to ~/pi
   help        Show this help`);
