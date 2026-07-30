@@ -10,7 +10,7 @@ function configureSettings(path) {
 	const settings = readJsonObject(path, {});
 	const existingPowerline = settings.powerline;
 	settings.powerline = isObject(existingPowerline)
-		? { ...existingPowerline, welcome: false, fixedEditor: false }
+		? { ...existingPowerline, welcome: false, fixedEditor: true }
 		: typeof existingPowerline === "string"
 			? { preset: existingPowerline, welcome: false, fixedEditor: false }
 			: { welcome: false, fixedEditor: false };
