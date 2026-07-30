@@ -14,6 +14,7 @@ const EXTENSIONS = [
 	"npm:pi-intercom",
 	"npm:pi-interactive-shell",
 	"npm:pi-tool-display",
+  "npm:pi-web-access",
 ];
 
 export function installExtensions(context) {
