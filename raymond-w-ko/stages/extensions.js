@@ -7,10 +7,11 @@ import { run } from "../lib/process.js";
 const EXTENSIONS = [
 	"npm:@juicesharp/rpiv-ask-user-question",
 	"npm:@ff-labs/pi-fff",
+	"npm:@quintinshaw/pi-dynamic-workflows",
+	"npm:pi-anthropic-oauth",
 	"npm:pi-goal",
 	"npm:pi-powerline-footer",
 	"npm:pi-intercom",
-	"npm:pi-subagents",
 	"npm:pi-interactive-shell",
 	"npm:pi-tool-display",
 ];
