@@ -1,19 +1,75 @@
-import { existsSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { NodeExecutionEnv } from "../../src/harness/env/nodejs.ts";
-import { JsonlSessionRepo } from "../../src/harness/session/jsonl-repo.ts";
-import { InMemorySessionRepo } from "../../src/harness/session/memory-repo.ts";
+import { createJsonlSessionStore } from "../../src/harness/session/jsonl-store.ts";
+import {
+	createInMemorySessionStore,
+	type InMemorySessionCreateOptions,
+} from "../../src/harness/session/memory-store.ts";
+import { createSessionRepository } from "../../src/harness/session/repository.ts";
+import type { SessionMetadata, SessionStore } from "../../src/harness/types.ts";
 import { createAssistantMessage, createTempDir, createUserMessage } from "./session-test-utils.ts";
 
-describe("InMemorySessionRepo", () => {
+class CountingReadEnv extends NodeExecutionEnv {
+	readCount = 0;
+
+	override async readTextFile(path: string, abortSignal?: AbortSignal) {
+		this.readCount += 1;
+		return super.readTextFile(path, abortSignal);
+	}
+}
+
+function createDeferred(): { promise: Promise<void>; resolve: () => void } {
+	let resolve!: () => void;
+	const promise = new Promise<void>((resolvePromise) => {
+		resolve = resolvePromise;
+	});
+	return { promise, resolve };
+}
+
+class BlockingAppendEnv extends NodeExecutionEnv {
+	readonly appendStarted = createDeferred();
+	readonly releaseAppend = createDeferred();
+
+	override async appendFile(path: string, content: string | Uint8Array) {
+		this.appendStarted.resolve();
+		await this.releaseAppend.promise;
+		return super.appendFile(path, content);
+	}
+}
+
+function createCountingInMemorySessionStore(): {
+	store: SessionStore<SessionMetadata, InMemorySessionCreateOptions, void>;
+	counter: { loadCount: number };
+} {
+	const source = createInMemorySessionStore();
+	const counter = { loadCount: 0 };
+	return {
+		counter,
+		store: {
+			create: (options) => source.create(options),
+			async load(metadata) {
+				counter.loadCount += 1;
+				return source.load(metadata);
+			},
+			list: (options) => source.list(options),
+			appendEntry: (metadata, entry) => source.appendEntry(metadata, entry),
+			delete: (metadata) => source.delete(metadata),
+			fork: (metadata, options, entries) => source.fork(metadata, options, entries),
+			[Symbol.asyncDispose]: () => source[Symbol.asyncDispose](),
+		},
+	};
+}
+
+describe("InMemorySessionStore", () => {
 	it("opens, deletes, and forks by metadata", async () => {
-		const repo = new InMemorySessionRepo();
+		const repo = createSessionRepository({ store: createInMemorySessionStore() });
 		const session = await repo.create({ id: "session-1" });
 		const metadata = await session.getMetadata();
 		const user1 = await session.appendMessage(createUserMessage("one"));
 		const assistant1 = await session.appendMessage(createAssistantMessage("two"));
 		const user2 = await session.appendMessage(createUserMessage("three"));
-		expect(await repo.open(metadata)).toBe(session);
+		await expect((await repo.open(metadata)).getMetadata()).resolves.toEqual(metadata);
 		expect((await repo.list()).map((info) => info.id)).toEqual(["session-1"]);
 		const fork = await repo.fork(metadata, { entryId: user2, id: "session-2" });
 		expect((await fork.getEntries()).map((entry) => entry.id)).toEqual([user1, assistant1]);
@@ -22,15 +78,84 @@ describe("InMemorySessionRepo", () => {
 		await repo.delete(metadata);
 		await expect(repo.open(metadata)).rejects.toThrow("Session not found: session-1");
 	});
+
+	it("retains the opened aggregate instead of reloading for scoped reads", async () => {
+		const { store, counter } = createCountingInMemorySessionStore();
+		const repo = createSessionRepository({ store });
+		const session = await repo.create({ id: "session-1" });
+		const entryId = await session.appendMessage(createUserMessage("one"));
+
+		await session.getMetadata();
+		await session.getLeafId();
+		await session.getEntry(entryId);
+		expect(counter.loadCount).toBe(0);
+	});
+
+	it("rejects repository operations and session writes after store disposal", async () => {
+		const store = createInMemorySessionStore();
+		const repo = createSessionRepository({ store });
+		const session = await repo.create({ id: "session-1" });
+		await store[Symbol.asyncDispose]();
+
+		await expect(repo.list()).rejects.toThrow("In-memory session store is disposed");
+		await expect(session.appendMessage(createUserMessage("late"))).rejects.toThrow(
+			"In-memory session store is disposed",
+		);
+	});
+
+	it("supports lexical ownership with await using", async () => {
+		let listDisposedStore: (() => Promise<SessionMetadata[]>) | undefined;
+		{
+			await using store = createInMemorySessionStore();
+			const repository = createSessionRepository({ store });
+			listDisposedStore = () => repository.list();
+			await repository.create({ id: "session-1" });
+		}
+
+		await expect(listDisposedStore!()).rejects.toThrow("In-memory session store is disposed");
+	});
 });
 
-describe("JsonlSessionRepo", () => {
+describe("JsonlSessionStore", () => {
+	it("waits for accepted appends before disposal and rejects later writes", async () => {
+		const root = createTempDir();
+		const env = new BlockingAppendEnv({ cwd: root });
+		const store = createJsonlSessionStore({ fs: env, sessionsRoot: root });
+		const repo = createSessionRepository({ store });
+		const session = await repo.create({ cwd: root, id: "session-1" });
+		const append = session.appendMessage(createUserMessage("accepted"));
+		await env.appendStarted.promise;
+		let closed = false;
+		const dispose = store[Symbol.asyncDispose]().then(() => {
+			closed = true;
+		});
+		await Promise.resolve();
+		expect(closed).toBe(false);
+		env.releaseAppend.resolve();
+		await append;
+		await dispose;
+		await expect(session.appendMessage(createUserMessage("late"))).rejects.toThrow("JSONL session store is disposed");
+	});
+
+	it("parses once when opened and retains state across appends", async () => {
+		const root = createTempDir();
+		const env = new CountingReadEnv({ cwd: root });
+		const repo = createSessionRepository({ store: createJsonlSessionStore({ fs: env, sessionsRoot: root }) });
+		const created = await repo.create({ cwd: root, id: "session-1" });
+		const metadata = await created.getMetadata();
+		await created.appendMessage(createUserMessage("initial"));
+		env.readCount = 0;
+		const opened = await repo.open(metadata);
+		for (let i = 0; i < 10; i++) await opened.appendMessage(createUserMessage(`message ${i}`));
+		expect(env.readCount).toBe(1);
+	});
+
 	it("stores sessions below encoded cwd directories and lists by cwd", async () => {
 		const root = createTempDir();
 		const env = new NodeExecutionEnv({ cwd: root });
 		const cwd = "/tmp/my-project";
 		const otherCwd = "/tmp/other-project";
-		const repo = new JsonlSessionRepo({ fs: env, sessionsRoot: root });
+		const repo = createSessionRepository({ store: createJsonlSessionStore({ fs: env, sessionsRoot: root }) });
 		const session = await repo.create({ cwd, id: "019de8c2-de29-73e9-ae0c-e134db34c447" });
 		const otherSession = await repo.create({ cwd: otherCwd, id: "other-session" });
 		const metadata = await session.getMetadata();
@@ -44,10 +169,21 @@ describe("JsonlSessionRepo", () => {
 		);
 	});
 
+	it("fails loudly when listing a malformed session file", async () => {
+		const root = createTempDir();
+		const env = new NodeExecutionEnv({ cwd: root });
+		const repo = createSessionRepository({ store: createJsonlSessionStore({ fs: env, sessionsRoot: root }) });
+		const session = await repo.create({ cwd: root, id: "session-1" });
+		const metadata = await session.getMetadata();
+		writeFileSync(metadata.path, "not json\n");
+
+		await expect(repo.list()).rejects.toMatchObject({ code: "invalid_session" });
+	});
+
 	it("opens, deletes, and forks by metadata", async () => {
 		const root = createTempDir();
 		const env = new NodeExecutionEnv({ cwd: root });
-		const repo = new JsonlSessionRepo({ fs: env, sessionsRoot: root });
+		const repo = createSessionRepository({ store: createJsonlSessionStore({ fs: env, sessionsRoot: root }) });
 		const source = await repo.create({ cwd: "/tmp/source", id: "source-session" });
 		const sourceMetadata = await source.getMetadata();
 		const user1 = await source.appendMessage(createUserMessage("one"));
@@ -69,7 +205,7 @@ describe("JsonlSessionRepo", () => {
 	it("persists header metadata through create, list, and fork", async () => {
 		const root = createTempDir();
 		const env = new NodeExecutionEnv({ cwd: root });
-		const repo = new JsonlSessionRepo({ fs: env, sessionsRoot: root });
+		const repo = createSessionRepository({ store: createJsonlSessionStore({ fs: env, sessionsRoot: root }) });
 		const source = await repo.create({
 			cwd: "/tmp/source",
 			id: "source-session",
