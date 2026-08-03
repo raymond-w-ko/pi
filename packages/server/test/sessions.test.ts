@@ -9,12 +9,10 @@ import {
 	Deferred,
 	type ProtocolTestClient,
 	TEST_MODEL,
-	TEST_TOKEN,
 	TestSessionBackend,
 } from "../src/testing/index.ts";
 import { createUnixServer, type UnixServerOptions } from "../src/transports/unix/index.ts";
 
-const TOKEN = TEST_TOKEN;
 const MODEL = TEST_MODEL;
 type Client = ProtocolTestClient;
 class MemoryBackend extends TestSessionBackend {}
@@ -49,7 +47,6 @@ async function startServer(backend = new MemoryBackend(), options: Partial<UnixS
 	const directory = await mkdtemp(join(tmpdir(), "pst-"));
 	tempDirectories.add(directory);
 	const server = createUnixServer(backend, {
-		token: TOKEN,
 		path: join(directory, "server.sock"),
 		...options,
 	});
@@ -140,6 +137,8 @@ describe("PiServer Unix integration", () => {
 		const detached = await client.request({ command: "detach", sessionId: createdId });
 		expect(detached).toMatchObject({ ok: true, result: { command: "detach", sessionId: createdId } });
 		expect(backend.latestRuntime(createdId).disposeCount).toBe(1);
+		const detachedAgain = await client.request({ command: "detach", sessionId: createdId });
+		expect(detachedAgain).toMatchObject({ ok: true, result: { command: "detach", sessionId: createdId } });
 
 		const attached = await attach(client, createdId);
 		expect(attached.id).toBe(backend.lastCreatedId);
