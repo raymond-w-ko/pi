@@ -15,6 +15,7 @@ const EXTENSIONS = [
 	"npm:pi-interactive-shell",
 	// "npm:pi-tool-display",
   "npm:pi-web-access",
+  "npm:@juicesharp/rpiv-todo",
 ];
 
 export function installExtensions(context) {
