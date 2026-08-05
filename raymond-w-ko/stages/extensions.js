@@ -26,12 +26,28 @@ export function installExtensions(context) {
 		context,
 	);
 	for (const extension of EXTENSIONS) {
+		if (isExtensionInstalled(context.npmInstallRoot, extension)) {
+			console.log(`skip: ${extension} already installed`);
+			continue;
+		}
 		run(context.binaryPath, ["install", extension], context);
 	}
 	removeUnlistedPackages(context);
 	run("npm", ["rebuild", "esbuild", "--prefix", context.npmInstallRoot], context);
 	run(context.binaryPath, ["update", "--extensions"], context);
 	restoreGeneratedModels(context);
+}
+
+function getNpmPackageName(source) {
+	return source.startsWith("npm:") ? source.slice("npm:".length) : undefined;
+}
+
+function isExtensionInstalled(npmInstallRoot, source) {
+	const packageName = getNpmPackageName(source);
+	if (!packageName) {
+		return false;
+	}
+	return existsSync(join(npmInstallRoot, "node_modules", ...packageName.split("/")));
 }
 
 function removeUnlistedPackages(context) {
