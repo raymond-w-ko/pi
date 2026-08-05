@@ -118,6 +118,7 @@ export type {
 	// Commands
 	RegisteredCommand,
 	RegisteredTool,
+	RegisteredToolRenderer,
 	ReplacedSessionContext,
 	ResolvedCommand,
 	// Events - Resources
@@ -157,6 +158,7 @@ export type {
 	ToolExecutionStartEvent,
 	ToolExecutionUpdateEvent,
 	ToolInfo,
+	ToolRendererOverride,
 	ToolRenderResultOptions,
 	ToolResultEvent,
 	ToolResultEventResult,

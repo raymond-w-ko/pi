@@ -1385,6 +1385,32 @@ pi.registerTool({
 });
 ```
 
+### pi.registerToolRenderer(toolName, renderer)
+
+Override rendering slots for a custom tool registered by another extension without replacing its schema, metadata, or execution. The renderer may be registered before or after the target tool; runtime registrations refresh the active tool registry immediately.
+
+Omitted slots keep the target tool's renderer. When multiple extensions register a renderer for the same tool, extension precedence applies and the first registration wins. Built-in tools are not affected; override a built-in with `pi.registerTool()` instead.
+
+```typescript
+pi.registerToolRenderer("search_issues", {
+  renderShell: "self",
+  renderCall(args, theme) {
+    return new Text(
+      theme.fg("toolTitle", theme.bold("search_issues")) +
+        " " +
+        theme.fg("accent", args.query),
+      0,
+      0,
+    );
+  },
+  renderResult(result, { expanded }, theme) {
+    if (!expanded) return new Text("", 0, 0);
+    const output = result.content.find((item) => item.type === "text")?.text ?? "";
+    return new Text(theme.fg("toolOutput", output), 0, 0);
+  },
+});
+```
+
 ### pi.sendMessage(message, options?)
 
 Inject a custom message into the session. Custom messages participate in LLM context. For durable TUI-only content that should not be sent to the LLM, use [`pi.appendEntry()`](#piappendentrycustomtype-data) with [`pi.registerEntryRenderer()`](#piregisterentryrenderercustomtype-renderer).

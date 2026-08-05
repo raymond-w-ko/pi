@@ -49,6 +49,7 @@ import type {
 	ProviderConfig,
 	RegisteredCommand,
 	RegisteredTool,
+	RegisteredToolRenderer,
 	ReplacedSessionContext,
 	ResolvedCommand,
 	ResourcesDiscoverEvent,
@@ -447,6 +448,26 @@ export class ExtensionRunner {
 		return this.extensions.map((e) => e.path);
 	}
 
+	private getRegisteredToolRenderer(toolName: string): RegisteredToolRenderer | undefined {
+		for (const ext of this.extensions) {
+			const renderer = ext.toolRenderers?.get(toolName);
+			if (renderer) return renderer;
+		}
+		return undefined;
+	}
+
+	private applyRegisteredToolRenderer(tool: RegisteredTool): RegisteredTool {
+		const renderer = this.getRegisteredToolRenderer(tool.definition.name);
+		if (!renderer) return tool;
+		return {
+			...tool,
+			definition: {
+				...tool.definition,
+				...renderer.renderer,
+			},
+		};
+	}
+
 	/** Get all registered tools from all extensions (first registration per name wins). */
 	getAllRegisteredTools(): RegisteredTool[] {
 		const toolsByName = new Map<string, RegisteredTool>();
@@ -457,7 +478,7 @@ export class ExtensionRunner {
 				}
 			}
 		}
-		return Array.from(toolsByName.values());
+		return Array.from(toolsByName.values(), (tool) => this.applyRegisteredToolRenderer(tool));
 	}
 
 	/** Get a tool definition by name. Returns undefined if not found. */
@@ -465,7 +486,7 @@ export class ExtensionRunner {
 		for (const ext of this.extensions) {
 			const tool = ext.tools.get(toolName);
 			if (tool) {
-				return tool.definition;
+				return this.applyRegisteredToolRenderer(tool).definition;
 			}
 		}
 		return undefined;

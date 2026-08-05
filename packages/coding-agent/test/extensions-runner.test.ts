@@ -426,6 +426,55 @@ describe("ExtensionRunner", () => {
 			expect(tools).toHaveLength(1);
 			expect(tools[0]?.definition.description).toBe("first");
 		});
+
+		it("applies renderer overrides without replacing tool execution or unspecified render slots", async () => {
+			const renderer = `
+				export default function(pi) {
+					pi.registerToolRenderer("shared", {
+						renderShell: "self",
+						renderCall: () => ({ render: () => ["override call"], invalidate() {} }),
+					});
+				}
+			`;
+			const tool = `
+				import { Type } from "typebox";
+				export default function(pi) {
+					pi.registerTool({
+						name: "shared",
+						label: "shared",
+						description: "original tool",
+						parameters: Type.Object({}),
+						execute: async () => ({ content: [{ type: "text", text: "original execution" }], details: {} }),
+						renderResult: () => ({ render: () => ["original result"], invalidate() {} }),
+					});
+				}
+			`;
+			fs.writeFileSync(path.join(extensionsDir, "a-renderer.ts"), renderer);
+			fs.writeFileSync(path.join(extensionsDir, "b-tool.ts"), tool);
+
+			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
+			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			const registered = runner.getAllRegisteredTools()[0];
+
+			expect(registered?.definition.renderShell).toBe("self");
+			expect(registered?.definition.renderCall?.({}, {} as never, {} as never).render(80)).toEqual([
+				"override call",
+			]);
+			expect(
+				registered?.definition
+					.renderResult?.(
+						{ content: [], details: {} },
+						{ expanded: false, isPartial: false },
+						{} as never,
+						{} as never,
+					)
+					.render(80),
+			).toEqual(["original result"]);
+			await expect(
+				registered?.definition.execute("call-1", {}, undefined, undefined, runner.createContext()),
+			).resolves.toMatchObject({ content: [{ type: "text", text: "original execution" }] });
+			expect(runner.getToolDefinition("shared")?.renderShell).toBe("self");
+		});
 	});
 
 	describe("command collection", () => {

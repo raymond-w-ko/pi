@@ -497,6 +497,12 @@ export interface ToolDefinition<TParams extends TSchema = TSchema, TDetails = un
 	) => Component;
 }
 
+/** Rendering slots that an extension can override for a tool registered elsewhere. */
+export type ToolRendererOverride<TParams extends TSchema = TSchema, TDetails = unknown, TState = any> = Pick<
+	ToolDefinition<TParams, TDetails, TState>,
+	"renderShell" | "renderCall" | "renderResult"
+>;
+
 type AnyToolDefinition = ToolDefinition<any, any, any>;
 
 /**
@@ -1247,6 +1253,12 @@ export interface ExtensionAPI {
 		tool: ToolDefinition<TParams, TDetails, TState>,
 	): void;
 
+	/** Override rendering slots for a tool registered by another extension. */
+	registerToolRenderer<TParams extends TSchema = TSchema, TDetails = unknown, TState = any>(
+		toolName: string,
+		renderer: ToolRendererOverride<TParams, TDetails, TState>,
+	): void;
+
 	// =========================================================================
 	// Command, Shortcut, Flag Registration
 	// =========================================================================
@@ -1529,6 +1541,12 @@ export interface RegisteredTool {
 	sourceInfo: SourceInfo;
 }
 
+export interface RegisteredToolRenderer {
+	toolName: string;
+	renderer: ToolRendererOverride;
+	sourceInfo: SourceInfo;
+}
+
 export interface ExtensionFlag {
 	name: string;
 	description?: string;
@@ -1690,6 +1708,7 @@ export interface Extension {
 	sourceInfo: SourceInfo;
 	handlers: Map<string, HandlerFn[]>;
 	tools: Map<string, RegisteredTool>;
+	toolRenderers?: Map<string, RegisteredToolRenderer>;
 	messageRenderers: Map<string, MessageRenderer>;
 	markdownTransformer?: MarkdownTransformer;
 	entryRenderers?: Map<string, EntryRenderer>;

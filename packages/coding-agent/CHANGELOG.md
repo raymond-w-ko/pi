@@ -72,6 +72,7 @@
 
 ### Added
 
+- Added `pi.registerToolRenderer()` so extensions can override rendering for custom tools registered by other extensions without replacing their execution.
 - Added built-in Baseten provider support with `BASETEN_API_KEY` authentication and `zai-org/GLM-5.2` as the default model.
 - Added `CredentialSynchronizationError` for credential changes that commit successfully but fail to synchronize local model state.
 - Added chainable `pi.registerMarkdownTransformer()` hooks for display-only transformation of user and assistant Markdown.
