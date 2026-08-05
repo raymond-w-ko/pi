@@ -13,7 +13,7 @@ const EXTENSIONS = [
 	"npm:pi-powerline-footer",
 	"npm:pi-intercom",
 	"npm:pi-interactive-shell",
-	"npm:pi-tool-display",
+	// "npm:pi-tool-display",
   "npm:pi-web-access",
 ];
 
