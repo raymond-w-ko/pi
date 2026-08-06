@@ -259,7 +259,7 @@ export {
 	type RetrySettings,
 	SettingsManager,
 	type SettingsManagerCreateOptions,
-	type UiMode,
+	type TuiMode,
 } from "./core/settings-manager.ts";
 // Skills
 export {
