@@ -15,6 +15,7 @@
 
 ### Fixed
 
+- Fixed assistant messages receiving an unconditional leading blank line before text or thinking content.
 - Fixed self-rendered tool rows receiving an outer blank line despite owning their framing and spacing.
 - Fixed inherited GitHub Copilot login triggering API rate limits while enabling model policies by limiting concurrent policy updates ([#6187](https://github.com/earendil-works/pi/issues/6187)).
 - Fixed fullscreen transcript search snapping back to the current match during manual scrolling and fragmented mouse input leaking into the search query.

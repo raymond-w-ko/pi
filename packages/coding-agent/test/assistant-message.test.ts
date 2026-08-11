@@ -91,6 +91,21 @@ describe("AssistantMessageComponent", () => {
 		expect(rendered).toContain("answer");
 	});
 
+	test("does not add outer spacing before hidden thinking", () => {
+		initTheme("dark");
+
+		const component = new AssistantMessageComponent(
+			createAssistantMessage([
+				{ type: "thinking", thinking: "private reasoning" },
+				{ type: "toolCall", id: "tool-1", name: "read", arguments: { path: "file.txt" } },
+			]),
+			true,
+		);
+		const lines = component.render(80).map((line) => stripAnsi(line).trimEnd());
+
+		expect(lines).toEqual([" Thinking..."]);
+	});
+
 	test("uses configured output padding for text and thinking", () => {
 		initTheme("dark");
 
