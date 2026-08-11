@@ -21,11 +21,6 @@ const EXTENSIONS = [
 export function installExtensions(context) {
 	repairExtensionPackageLock(context.npmInstallRoot);
 	configureExtensionPackage(join(context.npmInstallRoot, "package.json"));
-	run(
-		"npm",
-		["install", "--ignore-scripts", "--save-exact", "--prefix", context.npmInstallRoot, "@ff-labs/fff-bun"],
-		context,
-	);
 	for (const extension of EXTENSIONS) {
 		if (isExtensionInstalled(context.npmInstallRoot, extension)) {
 			console.log(`skip: ${extension} already installed`);
@@ -34,7 +29,6 @@ export function installExtensions(context) {
 		run(context.binaryPath, ["install", extension], context);
 	}
 	removeUnlistedPackages(context);
-	run("npm", ["rebuild", "esbuild", "--prefix", context.npmInstallRoot], context);
 	run(context.binaryPath, ["update", "--extensions"], context);
 	restoreGeneratedModels(context);
 }
