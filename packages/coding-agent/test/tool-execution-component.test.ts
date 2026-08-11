@@ -67,6 +67,26 @@ describe("ToolExecutionComponent parity", () => {
 		expect(rendered).toContain("custom result");
 	});
 
+	test("self-rendered tool rows own their outer spacing", () => {
+		const toolDefinition: ToolDefinition = {
+			...createBaseToolDefinition(),
+			renderShell: "self",
+			renderCall: () => new Text("custom call", 0, 0),
+		};
+
+		const component = new ToolExecutionComponent(
+			"custom_tool",
+			"tool-self-render-spacing",
+			{},
+			{},
+			toolDefinition,
+			createFakeTui(),
+			process.cwd(),
+		);
+
+		expect(component.render(120).map((line) => stripAnsi(line).trimEnd())).toEqual(["custom call"]);
+	});
+
 	test("self-rendered empty tool rows take no layout space", () => {
 		const toolDefinition: ToolDefinition = {
 			...createBaseToolDefinition(),

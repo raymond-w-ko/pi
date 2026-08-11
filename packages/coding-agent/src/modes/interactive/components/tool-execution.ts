@@ -229,11 +229,7 @@ export class ToolExecutionComponent extends Container {
 				return [];
 			}
 
-			const lines: string[] = [];
-			if (contentLines.length > 0) {
-				lines.push("");
-				lines.push(...contentLines);
-			}
+			const lines: string[] = [...contentLines];
 			for (let i = 0; i < this.imageComponents.length; i++) {
 				const spacer = this.imageSpacers[i];
 				if (spacer) {
