@@ -163,6 +163,7 @@ describe("openai-codex streaming", () => {
 				expect(headers?.get("User-Agent")).toBe(`pi (${platform()} ${release()}; ${arch()})`);
 				expect(headers?.get("accept")).toBe("text/event-stream");
 				expect(headers?.has("x-api-key")).toBe(false);
+				expect(decodeCodexRequestBody(init?.body)?.service_tier).toBe("fast");
 				return new Response(stream, {
 					status: 200,
 					headers: { "content-type": "text/event-stream" },
@@ -1080,7 +1081,7 @@ describe("openai-codex streaming", () => {
 				},
 			});
 
-			const fetchMock = vi.fn(async (input: string | URL) => {
+			const fetchMock = vi.fn(async (input: string | URL, init?: RequestInit) => {
 				const url = typeof input === "string" ? input : input.toString();
 				if (url === "https://api.github.com/repos/openai/codex/releases/latest") {
 					return new Response(JSON.stringify({ tag_name: "rust-v0.0.0" }), { status: 200 });
@@ -1089,6 +1090,7 @@ describe("openai-codex streaming", () => {
 					return new Response("PROMPT", { status: 200, headers: { etag: '"etag"' } });
 				}
 				if (url === "https://chatgpt.com/backend-api/codex/responses") {
+					expect(decodeCodexRequestBody(init?.body)?.service_tier).toBe(serviceTier);
 					return new Response(stream, {
 						status: 200,
 						headers: { "content-type": "text/event-stream" },
