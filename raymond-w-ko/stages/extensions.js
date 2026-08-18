@@ -10,6 +10,7 @@ const EXTENSIONS = [
 	"npm:@quintinshaw/pi-dynamic-workflows",
 	"npm:pi-anthropic-oauth",
 	"npm:pi-goal",
+	"npm:pi-hashline-edit-pro",
 	"npm:pi-powerline-footer",
 	"npm:pi-intercom",
 	"npm:pi-interactive-shell",
