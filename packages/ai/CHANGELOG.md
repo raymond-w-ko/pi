@@ -11,10 +11,6 @@
 - Added provider-neutral `toolChoice` support to simple stream requests.
 - Added China-specific ZAI Coding Plan models, including GLM-4.6V vision support, and API-equivalent usage cost estimates for models with published PAYG prices ([#8220](https://github.com/earendil-works/pi/issues/8220)).
 
-### Changed
-
-- Changed OpenAI Codex requests to use the `fast` service tier by default while preserving explicit `serviceTier` overrides.
-
 ### Fixed
 
 - Fixed Azure OpenAI Responses ignoring `toolChoice` in provider-specific stream requests.
