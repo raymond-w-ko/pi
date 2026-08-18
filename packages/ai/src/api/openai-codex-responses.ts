@@ -45,6 +45,7 @@ import { buildBaseOptions } from "./simple-options.ts";
 const DEFAULT_CODEX_BASE_URL = "https://chatgpt.com/backend-api";
 const JWT_CLAIM_PATH = "https://api.openai.com/auth" as const;
 const DEFAULT_MAX_RETRIES = 0;
+const DEFAULT_CODEX_SERVICE_TIER = "priority";
 const BASE_DELAY_MS = 1000;
 const DEFAULT_MAX_RETRY_DELAY_MS = 60_000;
 const DEFAULT_WEBSOCKET_CONNECT_TIMEOUT_MS = 15_000;
@@ -557,14 +558,11 @@ function buildRequestBody(
 		prompt_cache_key: cacheSessionId,
 		tool_choice: options?.toolChoice ?? "auto",
 		parallel_tool_calls: true,
+		service_tier: options?.serviceTier ?? DEFAULT_CODEX_SERVICE_TIER,
 	};
 
 	if (options?.temperature !== undefined) {
 		body.temperature = options.temperature;
-	}
-
-	if (options?.serviceTier !== undefined) {
-		body.service_tier = options.serviceTier;
 	}
 
 	if (toolPlacement.immediate.length > 0) {
