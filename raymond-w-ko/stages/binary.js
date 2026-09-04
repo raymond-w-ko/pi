@@ -8,6 +8,7 @@ export function buildBinary(context) {
 			"--skip-install",
 			"--skip-deps",
 			"--skip-build",
+			"--skip-archives",
 			"--platform",
 			context.binaryPlatform,
 		],
