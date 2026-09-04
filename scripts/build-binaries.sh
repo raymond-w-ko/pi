@@ -4,12 +4,13 @@
 # Mirrors .github/workflows/build-binaries.yml
 #
 # Usage:
-#   ./scripts/build-binaries.sh [--skip-install] [--skip-deps] [--skip-build] [--offline-model-data] [--platform <platform>] [--out <dir>]
+#   ./scripts/build-binaries.sh [--skip-install] [--skip-deps] [--skip-build] [--skip-archives] [--offline-model-data] [--platform <platform>] [--out <dir>]
 #
 # Options:
 #   --skip-install       Skip npm ci
 #   --skip-deps          Skip installing cross-platform dependencies
 #   --skip-build         Skip the package build
+#   --skip-archives      Keep assembled platform directories without creating release archives
 #   --offline-model-data Build with bundled model data instead of refreshing it
 #   --platform <name>    Build only for specified platform (darwin-arm64, darwin-x64, linux-x64, linux-arm64, windows-x64, windows-arm64)
 #   --out <dir>          Output directory (default: packages/coding-agent/binaries)
@@ -30,6 +31,7 @@ cd "$(dirname "$0")/.."
 SKIP_INSTALL=false
 SKIP_DEPS=false
 SKIP_BUILD=false
+SKIP_ARCHIVES=false
 OFFLINE_MODEL_DATA=false
 PLATFORM=""
 OUTPUT_DIR=""
@@ -46,6 +48,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-build)
             SKIP_BUILD=true
+            shift
+            ;;
+        --skip-archives)
+            SKIP_ARCHIVES=true
             shift
             ;;
         --offline-model-data)
@@ -208,7 +214,7 @@ for platform in "${PLATFORMS[@]}"; do
     fi
 done
 
-echo "==> Creating release archives..."
+echo "==> Assembling binary distributions..."
 
 # Copy shared files to each platform directory
 for platform in "${PLATFORMS[@]}"; do
@@ -246,38 +252,42 @@ for platform in "${PLATFORMS[@]}"; do
     fi
 done
 
-# Create archives
 cd "$OUTPUT_DIR"
 
-for platform in "${PLATFORMS[@]}"; do
-    if [[ "$platform" == windows-* ]]; then
-        # Windows (zip)
-        echo "Creating pi-$platform.zip..."
-        (cd "$platform" && zip -r ../pi-$platform.zip .)
-    else
-        # Unix platforms (tar.gz) - use wrapper directory for mise compatibility
-        echo "Creating pi-$platform.tar.gz..."
-        mv "$platform" pi && tar -czf pi-$platform.tar.gz pi && mv pi "$platform"
-    fi
-done
+if [[ "$SKIP_ARCHIVES" == "false" ]]; then
+    echo "==> Creating release archives..."
+    for platform in "${PLATFORMS[@]}"; do
+        if [[ "$platform" == windows-* ]]; then
+            # Windows (zip)
+            echo "Creating pi-$platform.zip..."
+            (cd "$platform" && zip -r ../pi-$platform.zip .)
+        else
+            # Unix platforms (tar.gz) - use wrapper directory for mise compatibility
+            echo "Creating pi-$platform.tar.gz..."
+            mv "$platform" pi && tar -czf pi-$platform.tar.gz pi && mv pi "$platform"
+        fi
+    done
 
-# Extract archives for easy local testing
-echo "==> Extracting archives for testing..."
-for platform in "${PLATFORMS[@]}"; do
-    rm -rf "$platform"
-    if [[ "$platform" == windows-* ]]; then
-        mkdir -p "$platform" && (cd "$platform" && unzip -q ../pi-$platform.zip)
-    else
-        tar -xzf pi-$platform.tar.gz && mv pi "$platform"
-    fi
-done
+    # Extract archives for easy local testing
+    echo "==> Extracting archives for testing..."
+    for platform in "${PLATFORMS[@]}"; do
+        rm -rf "$platform"
+        if [[ "$platform" == windows-* ]]; then
+            mkdir -p "$platform" && (cd "$platform" && unzip -q ../pi-$platform.zip)
+        else
+            tar -xzf pi-$platform.tar.gz && mv pi "$platform"
+        fi
+    done
+fi
 
 echo ""
 echo "==> Build complete!"
-echo "Archives available in $OUTPUT_DIR/"
-ls -lh *.tar.gz *.zip 2>/dev/null || true
-echo ""
-echo "Extracted directories for testing:"
+if [[ "$SKIP_ARCHIVES" == "false" ]]; then
+    echo "Archives available in $OUTPUT_DIR/"
+    ls -lh *.tar.gz *.zip 2>/dev/null || true
+    echo ""
+fi
+echo "Platform directories available for testing:"
 for platform in "${PLATFORMS[@]}"; do
     if [[ "$platform" == windows-* ]]; then
         echo "  $OUTPUT_DIR/$platform/pi.exe"
