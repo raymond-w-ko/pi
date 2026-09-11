@@ -6,7 +6,6 @@ export function buildBinary(context) {
 		[
 			"./scripts/build-binaries.sh",
 			"--skip-install",
-			"--skip-deps",
 			"--skip-build",
 			"--skip-archives",
 			"--platform",
