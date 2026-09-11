@@ -8,7 +8,7 @@ const EXTENSIONS = [
 	"npm:@juicesharp/rpiv-ask-user-question",
 	"npm:@ff-labs/pi-fff",
 	"npm:@quintinshaw/pi-dynamic-workflows",
-	"npm:pi-anthropic-oauth",
+	// "npm:pi-anthropic-oauth",
 	"npm:pi-goal",
 	// "git:github.com/raymond-w-ko/pi-hashline-edit-pro",
 	"npm:pi-powerline-footer",
