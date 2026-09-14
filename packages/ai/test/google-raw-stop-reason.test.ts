@@ -63,6 +63,7 @@ vi.mock("@google/genai", () => {
 			LANGUAGE: "LANGUAGE",
 			MALFORMED_FUNCTION_CALL: "MALFORMED_FUNCTION_CALL",
 			UNEXPECTED_TOOL_CALL: "UNEXPECTED_TOOL_CALL",
+			TOO_MANY_TOOL_CALLS: "TOO_MANY_TOOL_CALLS",
 			NO_IMAGE: "NO_IMAGE",
 		},
 		FunctionCallingConfigMode: {
@@ -159,6 +160,17 @@ describe("Google raw stop reasons", () => {
 				}),
 		},
 	];
+
+	it.each(adapters)("maps TOO_MANY_TOOL_CALLS to error for $name", async ({ createStream }) => {
+		googleGenAiMock.finishReason = "TOO_MANY_TOOL_CALLS";
+		googleGenAiMock.includeFunctionCall = false;
+
+		const message = await createStream().result();
+
+		expect(message.stopReason).toBe("error");
+		expect(message.rawStopReason).toBe("TOO_MANY_TOOL_CALLS");
+		expect(message.errorMessage).toBe("Provider stopped with: TOO_MANY_TOOL_CALLS");
+	});
 
 	it.each(adapters)("preserves MAX_TOKENS with a tool call as length for $name", async ({ createStream }) => {
 		googleGenAiMock.finishReason = "MAX_TOKENS";
