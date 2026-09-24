@@ -31,7 +31,6 @@ export function installExtensions(context) {
 	}
 	removeUnlistedPackages(context);
 	run(context.binaryPath, ["update", "--extensions"], context);
-	restoreGeneratedModels(context);
 }
 
 function getNpmPackageName(source) {
@@ -74,18 +73,4 @@ function configureExtensionPackage(path) {
 		fsevents: true,
 	};
 	writeJson(path, packageJson);
-}
-
-function restoreGeneratedModels(context) {
-	run(
-		"git",
-		[
-			"restore",
-			"--",
-			"packages/ai/src/models.generated.ts",
-			"packages/ai/src/image-models.generated.ts",
-			"packages/ai/src/providers/*.models.ts",
-		],
-		context,
-	);
 }
