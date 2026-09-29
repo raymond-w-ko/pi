@@ -88,6 +88,7 @@ describe("ExtensionRunner", () => {
 		setLabel: () => {},
 		getActiveTools: () => [],
 		getAllTools: () => [],
+		getSettings: () => ({}),
 		setActiveTools: () => {},
 		refreshTools: () => {},
 		getCommands: () => [],
@@ -504,7 +505,13 @@ describe("ExtensionRunner", () => {
 					.render(80),
 			).toEqual(["original result"]);
 			await expect(
-				registered?.definition.execute("call-1", {}, undefined, undefined, runner.createContext()),
+				registered?.definition.execute(
+					"call-1",
+					{},
+					undefined,
+					undefined,
+					runner.createToolContext("call-1", undefined),
+				),
 			).resolves.toMatchObject({ content: [{ type: "text", text: "original execution" }] });
 			expect(runner.getToolDefinition("shared")?.renderShell).toBe("self");
 		});
