@@ -33,7 +33,7 @@ import type {
 	ProviderConfig,
 	RegisteredCommand,
 	ToolDefinition,
-	ToolRendererOverride,
+	ToolRendererResolver,
 } from "./types.ts";
 
 const require = createRequire(import.meta.url);
@@ -300,17 +300,6 @@ function createExtensionAPI(
 			runtime.refreshTools();
 		},
 
-		registerToolRenderer(toolName: string, renderer: ToolRendererOverride): void {
-			runtime.assertActive();
-			extension.toolRenderers ??= new Map();
-			extension.toolRenderers.set(toolName, {
-				toolName,
-				renderer,
-				sourceInfo: extension.sourceInfo,
-			});
-			runtime.refreshTools();
-		},
-
 		registerCommand(name: string, options: Omit<RegisteredCommand, "name" | "sourceInfo">): void {
 			assertActive();
 			if (typeof name !== "string" || name.length === 0) {
@@ -373,6 +362,12 @@ function createExtensionAPI(
 			assertActive();
 			extension.entryRenderers ??= new Map();
 			extension.entryRenderers.set(customType, renderer as EntryRenderer);
+		},
+
+		registerToolRenderer(resolver: ToolRendererResolver): void {
+			assertActive();
+			extension.toolRenderers ??= [];
+			extension.toolRenderers.push(resolver);
 		},
 
 		// Flag access - checks extension registered it, reads from runtime
@@ -607,7 +602,6 @@ function createExtension(extensionPath: string, resolvedPath: string): Extension
 		sourceInfo: createSyntheticSourceInfo(extensionPath, { source, baseDir }),
 		handlers: new Map(),
 		tools: new Map(),
-		toolRenderers: new Map(),
 		messageRenderers: new Map(),
 		entryRenderers: new Map(),
 		commands: new Map(),

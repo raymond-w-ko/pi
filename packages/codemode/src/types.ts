@@ -42,9 +42,11 @@ export interface CodemodeTool {
 
 /**
  * One item of the script's output, in the order the script produced it: `text()` and `console.*`
- * produce text items, `image()` image items. `data` is base64.
+ * produce text items, with `console: true` for `console.*`, and `image()` image items. `data` is base64.
  */
-export type CodemodeOutputItem = { type: "text"; text: string } | { type: "image"; data: string; mimeType: string };
+export type CodemodeOutputItem =
+	| { type: "text"; text: string; console?: true }
+	| { type: "image"; data: string; mimeType: string };
 
 export type CodemodeCallStatus = "ok" | "error" | "cancelled";
 
@@ -57,11 +59,17 @@ export interface CodemodeCall {
 export type CodemodeErrorKind =
 	/** The script threw or failed to parse. `name` and `stack` come from the script's error. */
 	| "script"
-	/** The overall deadline expired. The worker was terminated. */
+	/**
+	 * The overall deadline expired, or a VM on the calling thread used up its interrupt budget. The VM
+	 * was stopped.
+	 */
 	| "timeout"
-	/** The caller's signal fired or the sandbox was closed. The worker was terminated. */
+	/** The caller's signal fired or the sandbox was closed. The VM was stopped. */
 	| "aborted"
-	/** The worker or VM failed outside the script's control (for example a wasm trap or a missing worker file). */
+	/**
+	 * The VM or its transport failed outside the script's control (for example a wasm trap, a missing
+	 * worker file, or a remote sandbox that failed).
+	 */
 	| "sandbox";
 
 export interface CodemodeError {
@@ -89,7 +97,8 @@ export type CodemodeResult =
 	  }
 	| { ok: false; error: CodemodeError; output: CodemodeOutputItem[]; calls: CodemodeCall[] };
 
-export interface CodemodeSandboxOptions {
+/** Options every sandbox accepts, wherever its VM runs. */
+export interface CodemodeSandboxBaseOptions {
 	tools?: CodemodeTool[];
 	/**
 	 * Functions exposed as top-level identifiers instead of on `tools`, for host helpers such as
@@ -109,6 +118,10 @@ export interface CodemodeSandboxOptions {
 	 * `InternalError: out of memory`. Default: no limit beyond wasm32's 4 GiB address space.
 	 */
 	memoryLimitBytes?: number;
+}
+
+/** Options of `CodemodeSandbox`, which runs each VM in a Node or Bun worker thread. */
+export interface CodemodeSandboxOptions extends CodemodeSandboxBaseOptions {
 	/**
 	 * Compiled `quickjs-wasi/quickjs.wasm`, usually from {@link loadQuickJSWasm}. Default:
 	 * `loadQuickJSWasm()`, the file in the installed `quickjs-wasi` package. Pass it when that file

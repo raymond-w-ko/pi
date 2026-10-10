@@ -31,6 +31,7 @@ import { applyBoundary, prepareBoundary } from "./inbox.ts";
 import { assignJson } from "./json.ts";
 import { endRun, LiveDoc, type LiveState, type ToolSlot } from "./live.ts";
 import { planSystemEntries, renderSections, replaySections } from "./prompt.ts";
+import { ensureProviderSessionId } from "./provider.ts";
 import { appendToolResult, harnessError, ToolTask, type ToolTaskResult } from "./tool.ts";
 import type {
 	CompactionPolicy,
@@ -105,7 +106,6 @@ type Request = {
 	readonly pollAt?: number;
 };
 
-const PARTIAL_THROTTLE_MS = 100;
 const DEFAULT_POLL_AFTER_MS = 5000;
 
 /**
@@ -192,7 +192,7 @@ export const GenerationTask = defineTask<GenerationInput, GenerationCheckpoint, 
 			}, context);
 			const model = runtime.models.getModel(ref.provider, ref.modelId);
 			if (model === undefined) return failNoModel(runtime, ref, context);
-			const view = await runtime.context(conversationId, context, cutoff);
+			const view = await runtime.context(conversationId, context, { at: cutoff });
 			let messages = view.messages;
 			await runtime.hooks.each("beforeRequest", async (hook) => {
 				const replaced = await hook({ messages }, runtime, context);
@@ -201,6 +201,7 @@ export const GenerationTask = defineTask<GenerationInput, GenerationCheckpoint, 
 			const options: SimpleStreamOptions = {
 				...streamOptions,
 				signal: runtime.signal,
+				sessionId: await ensureProviderSessionId(runtime, context),
 				...(thinkingLevel === "off" ? {} : { reasoning: thinkingLevel }),
 			};
 			const message = await streamResponse(runtime, model, messages, options, attempt, context);
@@ -272,7 +273,7 @@ export const GenerationTask = defineTask<GenerationInput, GenerationCheckpoint, 
 			await convertPartial(tx, live, conversationId);
 			for (const call of unstarted) {
 				const result = harnessError("aborted", `Tool ${call.name} was aborted`);
-				await appendToolResult(tx, conversationId, call, result, runtime.now());
+				await appendToolResult(tx, conversationId, call, result, { timestamp: runtime.now() });
 			}
 			endRun(tx, live, runtime.taskId, { status: "unanswered", reason: "aborted" });
 			return { status: "terminal", outcome: { status: "aborted" } };
@@ -294,7 +295,11 @@ async function readCalls(
 
 /** A tool task for call `callId`, owned by the generation. */
 function createToolTask(tx: Tx, runtime: Runtime, assistant: EntryId, callId: string): Promise<TaskId<ToolTaskResult>> {
-	return tx.createTask(ToolTask, { assistant, callId }, { ownership: { kind: "task", taskId: runtime.taskId } });
+	return tx.createTask(
+		ToolTask,
+		{ kind: "model", assistant, callId },
+		{ ownership: { kind: "task", taskId: runtime.taskId } },
+	);
 }
 
 /**
@@ -356,8 +361,9 @@ export async function convertPartial(tx: Tx, live: Draft<LiveState>, conversatio
 }
 
 /**
- * Stream one request and return the terminal message. Partials commit as trailing writes at most every 100 ms with one
- * commit in flight; `finally` stops the throttle and awaits that commit, so no stale partial lands after the outcome.
+ * Stream one request and return the terminal message. Partials commit as trailing writes at most every
+ * `progress.partialIntervalMs` (default 100 ms) with one commit in flight; `finally` stops the throttle and awaits that
+ * commit, so no stale partial lands after the outcome.
  */
 async function streamResponse(
 	runtime: Runtime,
@@ -367,6 +373,7 @@ async function streamResponse(
 	attempt: number,
 	context: Context,
 ): Promise<AssistantMessage> {
+	const interval = runtime.settings.progress.partialIntervalMs;
 	let pending: AssistantMessage | undefined;
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	let inFlight: Promise<void> | undefined;
@@ -392,7 +399,7 @@ async function streamResponse(
 			})
 			.finally(() => {
 				inFlight = undefined;
-				if (pending !== undefined && !stopped) timer = setTimeout(flush, PARTIAL_THROTTLE_MS);
+				if (pending !== undefined && !stopped) timer = setTimeout(flush, interval);
 			});
 	};
 	try {
@@ -402,7 +409,7 @@ async function streamResponse(
 			// never gets past it, so it never leaves a partial.
 			if (event.type === "done" || event.type === "error" || event.partial.content.length === 0) continue;
 			pending = event.partial;
-			if (timer === undefined && inFlight === undefined) timer = setTimeout(flush, PARTIAL_THROTTLE_MS);
+			if (timer === undefined && inFlight === undefined) timer = setTimeout(flush, interval);
 		}
 		return await events.result();
 	} finally {
@@ -457,7 +464,7 @@ async function classify(
 	const overflow = message.stopReason === "error" && isContextOverflow(message);
 	if (overflow && compacted === undefined && settings.compaction.enabled) {
 		const policy = settings.compaction;
-		const view = await runtime.context(conversationId, context, cutoff);
+		const view = await runtime.context(conversationId, context, { at: cutoff });
 		if (selectCut(view, policy.keepRecentTokens) !== undefined) {
 			const text = message.errorMessage ?? "Context overflow";
 			await runtime.commit(async (tx): Promise<Next> => {
@@ -547,7 +554,8 @@ async function startToolRound(
 	context: Context,
 ): Promise<void> {
 	const conversationId = runtime.conversationId;
-	const messages = request.messages ?? (await runtime.context(conversationId, context, request.cutoff)).messages;
+	const messages =
+		request.messages ?? (await runtime.context(conversationId, context, { at: request.cutoff })).messages;
 	const offered = new Set(getCurrentTools(messages).map((tool) => tool.name));
 	// Read as the round starts; a tool is resolved as its tool task resolves it.
 	const tools = (await runtime.agent(context)).tools;
@@ -566,7 +574,7 @@ async function startToolRound(
 		for (const call of calls) {
 			if (!offered.has(call.name)) {
 				const unavailable = harnessError("tool_unavailable", `Tool ${call.name} is not available`);
-				const result = await appendToolResult(tx, conversationId, call, unavailable, runtime.now());
+				const result = await appendToolResult(tx, conversationId, call, unavailable, { timestamp: runtime.now() });
 				slots.push({ callId: call.id, name: call.name, status: "done", entry: result.id });
 				continue;
 			}
@@ -601,7 +609,11 @@ async function finishToolRound(
 	const outcomes = await runtime.outcomes(tools, context);
 	tools.forEach((id, index) => {
 		const outcome = outcomes[index]!;
-		controls.set(id, outcome.status === "completed" ? outcome.result.control : undefined);
+		// Version 1 results have no kind; every result a generation's round reads is a model-issued call's.
+		controls.set(
+			id,
+			outcome.status === "completed" && outcome.result.kind !== "nested" ? outcome.result.control : undefined,
+		);
 	});
 	const slots = (await runtime.snapshot(LiveDoc, conversationId, context))?.tools ?? [];
 	const results = slots.flatMap((slot) => (slot.entry === undefined ? [] : [slot.entry]));
@@ -635,6 +647,7 @@ async function finishToolRound(
 				if (users.length > 0) await startRun(tx, conversationId, live, users);
 			} else {
 				delete live.tools;
+				delete live.nestedTools;
 				if (live.run?.taskId === runtime.taskId) live.run.inputs.push(...users);
 				handOver(live, runtime.taskId, await createGeneration(tx, conversationId));
 			}

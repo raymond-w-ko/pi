@@ -144,6 +144,35 @@ describe("task recovery", () => {
 		await third.harness.close(context);
 	});
 
+	// #10549
+	it("keeps a task's startedAt across close and reopen and stamps endedAt when it settles", async () => {
+		const path = await sqlitePath();
+		const service = new TransferService();
+		const Transfer = transferTask(service, { first: true });
+		let clock = 2_000;
+		const now = () => clock;
+
+		const first = await openTasks(await openNodeSqliteStorage(path), [Transfer], { now });
+		const root = await first.harness.root(context);
+		const id = await root.commit(
+			(tx) => tx.createTask(Transfer, { amount: 7 }, { ownership: { kind: "conversation" } }),
+			context,
+		);
+		first.harness.resume();
+		await eventually(() => service.calls === 1);
+		clock = 3_000;
+		await first.harness.close(context);
+
+		clock = 9_000;
+		const second = await openTasks(await openNodeSqliteStorage(path), [Transfer], { now });
+		const reopened = await second.harness.getTask(id, context);
+		expect([reopened?.state.status, reopened?.startedAt, reopened?.endedAt]).toEqual(["pending", 2_000, undefined]);
+		second.harness.resume();
+		const receipt = await second.harness.waitForTask(id, context);
+		expect([receipt.startedAt, receipt.endedAt]).toEqual([2_000, 9_000]);
+		await second.harness.close(context);
+	});
+
 	it("resumes abort work after close at every direct-task abort stage", async () => {
 		const path = await sqlitePath();
 		const log: string[] = [];
@@ -633,6 +662,46 @@ describe("definition handover", () => {
 		gate.resolve();
 		await harness.waitForTask(id, context);
 		expect(log).toEqual(["old:a start", "old:a end", "new:b start", "new:b end", "new:c"]);
+		await harness.close(context);
+	});
+
+	it("keeps the memos across a handover", async () => {
+		type Memoed = { phase: "a" } | { phase: "b" };
+		const log: string[] = [];
+		const gate = deferred();
+		const reached = deferred();
+		const memoTask = (label: string) =>
+			defineTask<null, Memoed, string>({
+				name: "test.handover-memo",
+				version: 1,
+				initial: () => ({ phase: "a" }),
+				phases: {
+					a: async (_task, runtime, ctx) => {
+						await runtime.memo("picked", label, ctx);
+						reached.resolve();
+						await gate.promise;
+						await runtime.commit(() => ({ status: "running", checkpoint: { phase: "b" } }), ctx);
+					},
+					b: async (_task, runtime, ctx) => {
+						// The candidate loses to the memo the old definition stored.
+						const picked = await runtime.memo("picked", label, ctx);
+						log.push(`${label}:b ${picked}`);
+						await runtime.commit(() => completed(picked), ctx);
+					},
+				},
+				abort: async () => {},
+			});
+		const registry = createRegistry();
+		addTask(registry, memoTask("old"));
+		const { harness } = await openTasks(new MemoryStorage(), [], { registry });
+		const id = await createIn(harness, memoTask("old"));
+		harness.resume();
+		await reached.promise;
+		addTask(registry, memoTask("new"));
+		gate.resolve();
+		const receipt = await harness.waitForTask(id, context);
+		expect(receipt.state.outcome).toEqual({ status: "completed", result: "old" });
+		expect(log).toEqual(["new:b old"]);
 		await harness.close(context);
 	});
 

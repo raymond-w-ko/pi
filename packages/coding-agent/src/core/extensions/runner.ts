@@ -70,7 +70,6 @@ import type {
 	ProviderConfig,
 	RegisteredCommand,
 	RegisteredTool,
-	RegisteredToolRenderer,
 	ReplacedSessionContext,
 	ResolvedCommand,
 	ResourcesDiscoverEvent,
@@ -83,6 +82,7 @@ import type {
 	SessionShutdownEvent,
 	ToolCallEvent,
 	ToolCallEventResult,
+	ToolRenderers,
 	ToolResultEvent,
 	ToolResultEventResult,
 	TurnEndEvent,
@@ -626,26 +626,6 @@ export class ExtensionRunner {
 		return this.extensions.map((e) => e.path);
 	}
 
-	private getRegisteredToolRenderer(toolName: string): RegisteredToolRenderer | undefined {
-		for (const ext of this.extensions) {
-			const renderer = ext.toolRenderers?.get(toolName);
-			if (renderer) return renderer;
-		}
-		return undefined;
-	}
-
-	private applyRegisteredToolRenderer(tool: RegisteredTool): RegisteredTool {
-		const renderer = this.getRegisteredToolRenderer(tool.definition.name);
-		if (!renderer) return tool;
-		return {
-			...tool,
-			definition: {
-				...tool.definition,
-				...renderer.renderer,
-			},
-		};
-	}
-
 	/** Get all registered tools from all extensions (first registration per name wins). */
 	getAllRegisteredTools(): RegisteredTool[] {
 		const toolsByName = new Map<string, RegisteredTool>();
@@ -656,7 +636,7 @@ export class ExtensionRunner {
 				}
 			}
 		}
-		return Array.from(toolsByName.values(), (tool) => this.applyRegisteredToolRenderer(tool));
+		return Array.from(toolsByName.values());
 	}
 
 	/** Get a tool definition by name. Returns undefined if not found. */
@@ -664,7 +644,7 @@ export class ExtensionRunner {
 		for (const ext of this.extensions) {
 			const tool = ext.tools.get(toolName);
 			if (tool) {
-				return this.applyRegisteredToolRenderer(tool).definition;
+				return tool.definition;
 			}
 		}
 		return undefined;
@@ -804,6 +784,14 @@ export class ExtensionRunner {
 
 	getMarkdownTransformers(): MarkdownTransformer[] {
 		return this.extensions.flatMap((ext) => (ext.markdownTransformer ? [ext.markdownTransformer] : []));
+	}
+
+	/** Renderers of calls to `toolName`: extension resolvers in load order, then `base`. */
+	resolveToolRenderers(toolName: string, base: () => ToolRenderers | undefined): ToolRenderers | undefined {
+		const resolvers = this.extensions.flatMap((ext) => ext.toolRenderers ?? []);
+		const resolve = (index: number): ToolRenderers | undefined =>
+			index < resolvers.length ? resolvers[index](toolName, () => resolve(index + 1)) : base();
+		return resolve(0);
 	}
 
 	getEntryRenderer(customType: string): EntryRenderer | undefined {

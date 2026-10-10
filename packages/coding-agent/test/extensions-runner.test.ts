@@ -464,10 +464,11 @@ describe("ExtensionRunner", () => {
 		it("applies renderer overrides without replacing tool execution or unspecified render slots", async () => {
 			const renderer = `
 				export default function(pi) {
-					pi.registerToolRenderer("shared", {
+					pi.registerToolRenderer((toolName, next) => toolName === "shared" ? {
+						...next(),
 						renderShell: "self",
 						renderCall: () => ({ render: () => ["override call"], invalidate() {} }),
-					});
+					} : next());
 				}
 			`;
 			const tool = `
@@ -488,15 +489,15 @@ describe("ExtensionRunner", () => {
 
 			const result = await discoverAndLoadExtensions([], tempDir, tempDir);
 			const runner = new ExtensionRunner(result.extensions, result.runtime, tempDir, sessionManager, modelRegistry);
+			expect(result.errors).toEqual([]);
 			const registered = runner.getAllRegisteredTools()[0];
+			const renderers = runner.resolveToolRenderers("shared", () => runner.getToolDefinition("shared"));
 
-			expect(registered?.definition.renderShell).toBe("self");
-			expect(registered?.definition.renderCall?.({}, {} as never, {} as never).render(80)).toEqual([
-				"override call",
-			]);
+			expect(renderers?.renderShell).toBe("self");
+			expect(renderers?.renderCall?.({}, {} as never, {} as never).render(80)).toEqual(["override call"]);
 			expect(
-				registered?.definition
-					.renderResult?.(
+				renderers
+					?.renderResult?.(
 						{ content: [], details: {} },
 						{ expanded: false, isPartial: false },
 						{} as never,
@@ -513,7 +514,9 @@ describe("ExtensionRunner", () => {
 					runner.createToolContext("call-1", undefined),
 				),
 			).resolves.toMatchObject({ content: [{ type: "text", text: "original execution" }] });
-			expect(runner.getToolDefinition("shared")?.renderShell).toBe("self");
+			expect(runner.getToolDefinition("shared")).toBe(registered?.definition);
+			expect(registered?.definition.renderShell).toBeUndefined();
+			expect(registered?.definition.renderCall).toBeUndefined();
 		});
 	});
 
@@ -941,6 +944,30 @@ describe("ExtensionRunner", () => {
 			expect(chained.messages).toEqual([]);
 			expect(buildSystemPrompt(chained.systemPromptOptions)).toMatch(/base[\s\S]*\nfirst\nsecond$/);
 		});
+	});
+
+	// Issue #10285: the MCP extension renders calls to tools that are not registered.
+	it("resolves tool renderers in extension load order, each able to defer to the next", async () => {
+		const runtime = createExtensionRuntime();
+		const eventBus = createEventBus();
+		const renderCall = () => ({ render: () => [], invalidate: () => {} });
+		const first = await loadExtensionFromFactory(
+			(pi) => pi.registerToolRenderer((toolName, next) => (toolName === "a" ? { renderCall } : next())),
+			tempDir,
+			eventBus,
+			runtime,
+		);
+		const second = await loadExtensionFromFactory(
+			(pi) => pi.registerToolRenderer((_toolName, next) => next() ?? { renderShell: "self" }),
+			tempDir,
+			eventBus,
+			runtime,
+		);
+		const runner = new ExtensionRunner([first, second], runtime, tempDir, sessionManager, modelRegistry);
+
+		expect(runner.resolveToolRenderers("a", () => undefined)).toEqual({ renderCall });
+		expect(runner.resolveToolRenderers("b", () => undefined)).toEqual({ renderShell: "self" });
+		expect(runner.resolveToolRenderers("b", () => ({ renderCall }))).toEqual({ renderCall });
 	});
 
 	describe("boundary chaining", () => {

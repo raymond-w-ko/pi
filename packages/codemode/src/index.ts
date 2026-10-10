@@ -4,13 +4,36 @@ export {
 	mcpStructuredContentSchema,
 	type RenderDeclarationsOptions,
 	renderDeclarations,
+	renderToolOutputType,
 	renderToolSample,
 	renderToolSignature,
 	schemaToType,
 } from "./declarations.ts";
 export { toCodemodeIdentifier } from "./identifier.ts";
+export { CodemodeSandboxBase } from "./runtime/execution.ts";
 export { CodemodeSandbox } from "./runtime/host.ts";
-export { MAX_STORE_TOTAL_CHARS, MAX_STORE_VALUE_CHARS } from "./runtime/prelude-source.ts";
+export {
+	DEFAULT_INTERRUPT_BUDGET,
+	InlineCodemodeSandbox,
+	type InlineCodemodeSandboxOptions,
+} from "./runtime/inline.ts";
+export {
+	MAX_OUTPUT_CHARS,
+	MAX_OUTPUT_ITEMS,
+	MAX_STORE_TOTAL_CHARS,
+	MAX_STORE_VALUE_CHARS,
+} from "./runtime/prelude-source.ts";
+export {
+	type CodemodeRemote,
+	type CodemodeRemoteExchange,
+	type CodemodeRemoteMessage,
+	type CodemodeRemoteReply,
+	type CodemodeRemoteRequest,
+	type CodemodeServeOptions,
+	RemoteCodemodeSandbox,
+	type RemoteCodemodeSandboxOptions,
+	serveCodemodeRemote,
+} from "./runtime/remote.ts";
 export {
 	CODEMODE_OPTIONS_PREFIX,
 	CODEMODE_SOURCE_GRAMMAR,
@@ -28,6 +51,7 @@ export type {
 	CodemodeJsonSchema,
 	CodemodeOutputItem,
 	CodemodeResult,
+	CodemodeSandboxBaseOptions,
 	CodemodeSandboxOptions,
 	CodemodeStoreWrites,
 	CodemodeTool,
