@@ -2,6 +2,7 @@ import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { isObject, readJsonObject, writeJson } from "../lib/json.js";
 import { getRemovalSource, readPackageSources } from "../lib/package-settings.js";
+import { configurePnpm } from "../lib/pnpm.js";
 import { run } from "../lib/process.js";
 
 const EXTENSIONS = [
@@ -20,6 +21,7 @@ const EXTENSIONS = [
 ];
 
 export function installExtensions(context) {
+	configurePnpm(context);
 	repairExtensionPackageLock(context.npmInstallRoot);
 	configureExtensionPackage(join(context.npmInstallRoot, "package.json"));
 	for (const extension of EXTENSIONS) {

@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Preserve upstream build scripts without using npm for their nested script calls.
+if [[ "${1:-}" != "run" ]]; then
+	printf 'Personal pnpm build adapter only supports npm run, got: %s\n' "$*" >&2
+	exit 1
+fi
+exec pnpm "$@"

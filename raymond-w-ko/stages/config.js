@@ -1,7 +1,9 @@
 import { join } from "node:path";
 import { isObject, readJsonObject, writeJson } from "../lib/json.js";
+import { configurePnpm } from "../lib/pnpm.js";
 
 export function configureAgent(context) {
+	configurePnpm(context);
 	configureSettings(join(context.agentDir, "settings.json"));
 	configureKeybindings(join(context.agentDir, "keybindings.json"));
 }
