@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { parse } from "yaml";
 import { configurePnpm, withPnpmWorkspace } from "./lib/pnpm.js";
 import { prepareWorkspace } from "./stages/workspace.js";
 
@@ -34,11 +35,16 @@ test("workspace configuration preserves linking, hoisting, overrides, and releas
 		assert.throws(
 			() =>
 				withPnpmWorkspace(context, () => {
-					const configuration = JSON.parse(readFileSync(path, "utf8"));
+					const contents = readFileSync(path, "utf8");
+					assert.match(contents, /^packages:\n  - /);
+					const configuration = parse(contents);
 					assert.deepEqual(configuration.packages, ["packages/*"]);
 					assert.equal(configuration.nodeLinker, "hoisted");
 					assert.equal(configuration.linkWorkspacePackages, true);
 					assert.equal(configuration.minimumReleaseAge, 2880);
+					assert.equal(configuration.verifyDepsBeforeRun, false);
+					assert.equal(configuration.ignoreScripts, true);
+					assert.equal(configuration.lockfileDir, context.repoRoot);
 					assert.deepEqual(configuration.overrides, { protobufjs: "7.6.6" });
 					throw new Error("build failed");
 				}),
@@ -50,6 +56,31 @@ test("workspace configuration preserves linking, hoisting, overrides, and releas
 		assert.equal(readFileSync(path, "utf8"), "packages: []\n");
 	});
 });
+
+for (const hasPreviousLockfile of [false, true]) {
+	for (const fails of [false, true]) {
+		test(`workspace archives its lockfile and restores prior state (existing=${hasPreviousLockfile}, failure=${fails})`, () => {
+			fixture((context) => {
+				const lockfilePath = join(context.repoRoot, "pnpm-lock.yaml");
+				if (hasPreviousLockfile) writeFileSync(lockfilePath, "previous lockfile\n");
+				const action = () =>
+					withPnpmWorkspace(context, () => {
+						writeFileSync(lockfilePath, "generated lockfile\n");
+						if (fails) throw new Error("build failed");
+					});
+				if (fails) assert.throws(action, /build failed/);
+				else action();
+				assert.equal(
+					readFileSync(join(context.repoRoot, "raymond-w-ko", ".pnpm", "pnpm-lock.yaml"), "utf8"),
+					"generated lockfile\n",
+				);
+				if (hasPreviousLockfile) assert.equal(readFileSync(lockfilePath, "utf8"), "previous lockfile\n");
+				else assert.equal(existsSync(lockfilePath), false);
+				assert.equal(existsSync(join(context.repoRoot, "pnpm-workspace.yaml")), false);
+			});
+		});
+	}
+}
 
 test("workspace rejects conflicting configuration before attempting destructive cleanup", () => {
 	fixture((context) => {
@@ -86,7 +117,7 @@ test("build adapter forwards npm run to pnpm and rejects other npm commands", ()
 });
 
 for (const command of [[process.execPath, join(repoRoot, "node_modules/pnpm/bin/pnpm.cjs")], ["pnpm"]])
-	test(`pnpm imports the npm lock and links local packages using personal lock storage (${command[0]})`, () => {
+	test(`pnpm installs then runs nested scripts without reinstalling or lifecycle hooks (${command[0]})`, () => {
 		fixture((context) => {
 			const child = join(context.repoRoot, "packages", "child");
 			mkdirSync(child, { recursive: true });
@@ -96,34 +127,76 @@ for (const command of [[process.execPath, join(repoRoot, "node_modules/pnpm/bin/
 					name: "fixture",
 					private: true,
 					workspaces: ["packages/*"],
-					dependencies: { child: "1.0.0" },
+					devDependencies: { child: "1.0.0" },
+					scripts: {
+						prepare: "node prepare.cjs",
+						smoke: "cd packages/child && npm run smoke",
+					},
 				}),
 			);
-			writeFileSync(join(child, "package.json"), JSON.stringify({ name: "child", version: "1.0.0" }));
+			writeFileSync(
+				join(child, "package.json"),
+				JSON.stringify({
+					name: "child",
+					version: "1.0.0",
+					bin: { "fixture-compiler": "compiler.cjs" },
+					scripts: { smoke: "fixture-compiler" },
+				}),
+			);
 			writeFileSync(
 				join(context.repoRoot, "package-lock.json"),
 				JSON.stringify({
 					name: "fixture",
 					lockfileVersion: 3,
 					packages: {
-						"": { name: "fixture", dependencies: { child: "1.0.0" }, workspaces: ["packages/*"] },
+						"": { name: "fixture", devDependencies: { child: "1.0.0" }, workspaces: ["packages/*"] },
 						"packages/child": { name: "child", version: "1.0.0" },
 						"node_modules/child": { resolved: "packages/child", link: true },
 					},
 				}),
 			);
+			writeFileSync(
+				join(context.repoRoot, "prepare.cjs"),
+				'require("node:fs").writeFileSync("prepare-ran", "unexpected");\n',
+			);
+			writeFileSync(
+				join(child, "compiler.cjs"),
+				'#!/usr/bin/env node\nrequire("node:assert/strict").equal(require("child/package.json").version, "1.0.0"); console.log("SMOKE_OK");\n',
+				{ mode: 0o755 },
+			);
+			let installedLockfile;
 			withPnpmWorkspace(context, () => {
-				const lockfileDir = join(context.repoRoot, "raymond-w-ko", ".pnpm");
-				mkdirSync(lockfileDir, { recursive: true });
-				for (const args of [["import"], ["install", "--offline", "--ignore-scripts", "--frozen-lockfile"]]) {
-					const result = spawnSync(command[0], [...command.slice(1), ...args, `--config.lockfile-dir=${lockfileDir}`], {
+				const lockfilePath = join(context.repoRoot, "pnpm-lock.yaml");
+				for (const args of [["import"], ["install", "--offline", "--frozen-lockfile"]]) {
+					const result = spawnSync(command[0], [...command.slice(1), ...args], {
 						cwd: context.repoRoot,
 						encoding: "utf8",
 					});
 					assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
 				}
-				assert.equal(existsSync(join(lockfileDir, "pnpm-lock.yaml")), true);
+				assert.equal(existsSync(lockfilePath), true);
+				assert.equal(existsSync(join(context.repoRoot, "node_modules", ".bin", "fixture-compiler")), true);
 				assert.equal(existsSync(join(context.repoRoot, "node_modules/child/package.json")), true);
+				assert.equal(existsSync(join(context.repoRoot, "prepare-ran")), false);
+				installedLockfile = readFileSync(lockfilePath, "utf8");
+				const result = spawnSync(command[0], [...command.slice(1), "run", "smoke"], {
+					cwd: context.repoRoot,
+					encoding: "utf8",
+					env: { ...process.env, PATH: `${join(repoRoot, "raymond-w-ko", "bin")}:${process.env.PATH}` },
+				});
+				assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+				assert.match(result.stdout, /SMOKE_OK/);
+				assert.doesNotMatch(
+					`${result.stdout}\n${result.stderr}`,
+					/ERR_|installing dependencies|install that runs before scripts|prepare\$|Scope:|Lockfile|Progress:|Done in/,
+				);
+				assert.equal(existsSync(join(context.repoRoot, "prepare-ran")), false);
+				assert.equal(readFileSync(lockfilePath, "utf8"), installedLockfile);
 			});
+			assert.equal(existsSync(join(context.repoRoot, "pnpm-lock.yaml")), false);
+			assert.equal(
+				readFileSync(join(context.repoRoot, "raymond-w-ko", ".pnpm", "pnpm-lock.yaml"), "utf8"),
+				installedLockfile,
+			);
 		});
 	});
