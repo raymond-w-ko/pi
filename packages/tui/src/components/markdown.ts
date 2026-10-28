@@ -536,10 +536,14 @@ export class Markdown implements Component {
 
 			case "latexBlock": {
 				const latexToken = token as LatexToken;
-				const rendered =
+				let rendered =
 					!latexToken.pending && this.options.renderLatex !== false
-						? (renderLatex(latexToken.text, { display: true }) ?? latexToken.raw.trim())
-						: latexToken.raw.trim();
+						? renderLatex(latexToken.text, { display: true })
+						: undefined;
+				// A 2D layout cannot be wrapped row by row; fall back to the raw source when it does not fit.
+				if (rendered === undefined || rendered.split("\n").some((line) => visibleWidth(line) > width)) {
+					rendered = latexToken.raw.trim();
+				}
 				for (const line of rendered.split("\n")) {
 					lines.push(this.applyDefaultStyle(line));
 				}
@@ -596,8 +600,21 @@ export class Markdown implements Component {
 					return quoteStyle(lineWithReappliedStyle);
 				};
 
+				// With no room for another border ("│ " plus at least one content column), render the
+				// nested content without one. Otherwise each extra level re-wraps every child line at
+				// width 1 and the output grows exponentially with nesting depth.
+				if (width < 3) {
+					const quoteTokens = token.tokens || [];
+					for (let i = 0; i < quoteTokens.length; i++) {
+						for (const line of this.renderToken(quoteTokens[i], width, quoteTokens[i + 1]?.type, styleContext)) {
+							lines.push(line);
+						}
+					}
+					break;
+				}
+
 				// Calculate available width for quote content (subtract border "│ " = 2 chars)
-				const quoteContentWidth = Math.max(1, width - 2);
+				const quoteContentWidth = width - 2;
 
 				// Blockquotes contain block-level tokens (paragraph, list, code, etc.), so render
 				// children with renderToken() instead of renderInlineTokens().
@@ -611,9 +628,14 @@ export class Markdown implements Component {
 				for (let i = 0; i < quoteTokens.length; i++) {
 					const quoteToken = quoteTokens[i];
 					const nextQuoteToken = quoteTokens[i + 1];
-					renderedQuoteLines.push(
-						...this.renderToken(quoteToken, quoteContentWidth, nextQuoteToken?.type, quoteInlineStyleContext),
-					);
+					for (const line of this.renderToken(
+						quoteToken,
+						quoteContentWidth,
+						nextQuoteToken?.type,
+						quoteInlineStyleContext,
+					)) {
+						renderedQuoteLines.push(line);
+					}
 				}
 
 				// Avoid rendering an extra empty quote line before the outer blockquote spacing.
