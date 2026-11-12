@@ -103,3 +103,45 @@ and its working rules are in `handoff.md`.
   store refuses, replaces explicitly, or copies under a new id; delete retires them. The rule stays: anything needed
   while the worker is off lives on the server, the rest in the session's store, never both. No central metadata store,
   no `metadataOf`, no export callbacks.
+- **Efficiency is a requirement (owner, 2026-11-09):** p3 must be extremely efficient: dozens to hundreds of session
+  workers on one reasonably beefy machine, and a super snappy UI. Every design and build step states its memory per
+  worker, its startup cost and its bytes on the wire for common UI actions (switching sessions and conversations),
+  and measures them; findings of p2's perf work (session "fucked up perf", subagent `worker-mem`) feed p3's design.
+  Any Chord change made for performance (for example references sharing or keeping replicas) must keep Chord's
+  correctness guarantees and goes through the full review.
+- **Tests are isolated and deterministic (owner, 2026-11-09, after p2's subagents test race):** each test case gets its
+  own session (and its own subagents, conversations and stores); nothing a case leaves behind is visible to the next.
+  The fake model answers what the test scripted for each request, deterministically, never "whatever came last"; a
+  request it has no script for fails the test. A test waits for an effect it caused (an entry newer than its own input,
+  a result of its own call), never for a pattern that may already be there. A failure under load is a bug until its
+  root cause is known.
+- **A view's frame is a Chord client with a view principal and its own socket (owner, 2026-11-10):** agent-made views
+  run in sandboxed frames that connect to the server with their own link, authenticated by a short-lived token scoped to
+  the view, as a principal `{ kind: "view", session, view, for }` that never gets the viewer's powers; objects serve view
+  variants (the room for real-time collaboration among them). One WebSocket per view, not piggybacked on the page's:
+  a fast view never queues behind the page's traffic; piggybacking (a weaker principal for a relay's origin) waits for
+  a case. Details: `views.md` §4a.
+- **Read-only sharing (owner, 2026-11-11: "we obv want read-only sharing"; merged.md §4 question 2):** a session can be
+  shared with a viewer who reads everything and sends nothing (`mayView` without `maySend`), besides full participation.
+- **The agent writes plugins; sketches stay single-player (owner, 2026-11-11: "radical idea: this is all fucking
+  stupid. what if the agent had a tool to write/edit the contents of plugins directly"):** anything an agent builds that
+  is multiplayer, persistent or needs rules (games, shared boards, Max's glyph editor) is a plugin the agent writes and
+  applies itself, with a server object, typed contracts and Chord state and events, whatever environment the agent
+  otherwise works in. The trust boundary is access to the server; prompt injection through ingested content is an
+  accepted risk (it already applies when the agent works on the server machine), and a guest who may send can already
+  have the agent run `bash` there. The plugin tools are ordinary tools in the session's selection: a locked-down
+  session does not get them, as it does not get `bash`; no extra apply gate. Sandboxed HTML views remain only as
+  single-player artifacts. Dropped: the generic room (p2 rooms v1 stays as a playground), the rooms v2 leader design
+  and the rooms v3 sequenced model (`apps/p2/docs/rooms-v3/`, kept as the record of the use cases), view principals for
+  sketches, and views.md's two-tier decision for agent-made views. First built in p2.
+- **Artifacts and views (owner, 2026-11-12; p2 builds it first, p3 takes the same structure with rough edges sanded
+  down):** each plugin owns its per-session data, keyed by the session's host address on the server (export, import and
+  delete carry it; versions are the plugin's business). A web registry `ArtifactKinds` (title, icon, live
+  `useItems`/`useCount`, optional `Row` and removal, the view kind that opens an item) collects listable items for the
+  artifacts sheet and button; `ViewKinds` only gives panes (`PaneProps` `item`, `inline`). Inline artifacts are a tool
+  card rendering the item's pane, mounted only while visible. Plugin tools are code-mode only, grouped by the code-mode
+  namespace their extension declares (description in the prompt, instructions on demand); the prompt lists namespaces
+  from configuration so it stays stable when servers connect. Supersedes "A view's frame is a Chord client with a view
+  principal" and drops rooms and the view library. As built in p2: html artifacts keep the custom views' page API
+  (`window.p2view`, state per artifact); a reader who may not change the session's views opens an item in the
+  artifacts side panel on their own device; a session's clone and fork copy its artifacts.
