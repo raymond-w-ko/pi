@@ -50,8 +50,9 @@ P2_FAKE=1 npm start          # http://127.0.0.1:8788, data in ~/.pi/p2
   503. A plugin reload rolls web facets out with the server's and workers' (the surface's step last): an open page
   fetches the changed scripts and applies them in place (`host.reload` in the page; each plugin's stylesheet swapped
   with its code), so the transcript's scroll and the other panes stay; only base code (the entry, `src/web`,
-  `src/runtime`, the API, Chord, React) needs a restart, and pages reload onto the new base: before reconnecting a
-  page asks `/_chord/web/base`, another one reloads it. No polling. A page's link names its base
+  `src/runtime`, the API, Chord, React) needs a restart, and pages reload onto the new base: when its link drops a
+  page asks `/_chord/web/base` alongside the reconnect (never before it: one check at a time, a drop while one runs
+  asks nothing more), and another base stops the reconnecting and reloads the page. No polling. A page's link names its base
   (`/chord?web=<base>`); every other client names itself (`?client=tui`, `cloud`, `script` for scripts and tests;
   `src/runtime/stale-page.ts`). The server refuses a link naming another base, or neither a base nor a known client (a
   page from before 2026-11-12, which would re-hold types removed since), at once (close code 4001; the page reloads)
@@ -263,7 +264,7 @@ pi's defaults (rebindable in pi's `keybindings.json` or p2 prefs; `/hotkeys` lis
 | --- | --- |
 | Ctrl+R (chat), `/sessions`, `/resume`, `/new` | Session picker / create a session with a working directory |
 | Ctrl+L, `/model` | Model picker, then thinking level (with no session, sets the default; owner) |
-| Enter / Alt+Enter | Send (steer if busy) / queue a follow-up |
+| Enter / Alt+Enter | Send (steer if busy) / queue a follow-up; idle: send in a new branch (`docs/tree.md`) |
 | Escape / Alt+Up | Stop / restore the last queued input to the editor |
 | Ctrl+C / Ctrl+D | Clear the editor (twice: exit) / exit when the editor is empty (`/quit`) |
 | Ctrl+T / Ctrl+O | Show thinking / expand tool output |
@@ -463,7 +464,7 @@ p2 runs on Chord v2 (`packages/chord`, `docs/design.md` there); the port's notes
 - **Contract versions:** pages and TUIs keep the contracts they were built with until they reload, so a deploy that
   bumps a contract a client holds must keep serving the old version: write the history with `evolve` (the released
   version as the base, verbatim, so old bundles' fingerprints match) and give the provider an `accepts` table mapping
-  current state and results back (`Sessions` v3/v4, `Catalog` v2/v3, `SessionTree` v1, `Envs` v1/v2;
+  current state and results back (`Sessions` v3/v4, `Catalog` v2/v3, `SessionTree` v1/v2, `Envs` v1/v2;
   `test/p2/contract-versions.test.ts` binds the released declarations). Without it, old clients wait unbound
   (`contract_mismatch`) until they reload.
 
@@ -669,6 +670,38 @@ detached snapshots survive a server restart. The terminal log preload runs befor
 syntax/startup errors are retained too. Focused tests: `logs.test.ts`, `ui-logs.test.ts` and status cases in
 `test-host.test.ts`; the browser regression exercises the original `Unknown p2 plugin: settings` failure, sticky
 startup fencing, the list marker, owner notice, worker-filtered Show logs and recovery through Retry.
+
+**Telemetry** (Chord §29; off unless settings.json's `telemetry` is `true`, read once at the server's start; no
+sampling: Chord offers none; recording everything cost the phone 1.8M spans, 1 GB and a third of a core in 15 h, so it
+is opt-in since 2026-11-13). Off, the server opens no store and its ingest objects refuse everyone (a page loaded while it
+was on fails `forbidden` at once and stops sending, never waits unbound), `WorkerInit.telemetry` is
+false (the worker's host has no recorder and sends nothing), no page is marked, every host uses Chord's NOOP adapter,
+and `Traces` answers `unavailable` "telemetry is off (settings.json telemetry)" (the pane and the tools show it;
+`telemetry-off.test.ts`). On: the server records to `<data>/telemetry.sqlite`
+(`openTelemetry`, `src/runtime/host-dirs.ts`; Chord's SQLite store, 7 days, a queue of 10,000 spans, a flush every
+second; its own private file, never in a backup), its only writer. Each session worker records in memory (its host's
+spans and metrics, and Durable's `pi.durable.*` and pi-ai's `pi.ai.*`: the Harness gets the same adapter) and sends
+to the server's `WorkerTelemetry` every second and when it closes (`src/hosts/worker.ts`), stamped `chord.host:
+session|<id>`. Owners' pages record too (`#root` `data-p2-telemetry`, set by `web.ts` for owners; `startPage({
+telemetry: true })`) and send to `PageTelemetry` every 3 s and when hidden; the server admits owners only
+(`telemetryIngestFacet({ admit })`: a guest could open page after page, each with its own budget). Carriers join a
+page's call, the server's relay and the worker's method into one trace; React's holds are roots of the page's own
+traces. What a span records about its principal is `principalAttributes` (`src/runtime/principals.ts`):
+`p2.principal` (`owner:<access>`, `guest`, `worker`, `server`, `host`) and a guest's id or a worker's session,
+never a name or an email. Read with `node --import ./src/source.ts scripts/traces.ts [--name] [--attr k=v]
+[--errors] [--since <minutes>] [--limit]` (read-only, safe while the server runs), or in the page and by the agent
+(`plugins/telemetry`): `Traces` (server) reads the store (`ServerParts.telemetry`) with bounds (50 traces a page,
+2000 spans a trace, 1000 metric rows, 8 attribute filters); variant `owner` for owners, `agent` for a session's worker,
+refused at every call while that session is shared (any link, guest or person: viewers read what the agent finds) or
+locked; anyone else `forbidden`. The Traces view kind (a pane: search by the first span's name, attributes, errors and
+a window; traces newest first, more by cursor; one trace as a span tree on its timeline with attributes, events and
+links that open their trace; list or trace on narrow panes, side by side from 620px), also a Settings section (a trace
+a layer of the sheet) and the command "Show traces" (owners). The agent's code-mode tools, namespace `telemetry`
+(`telemetry_find_traces`, `telemetry_get_trace`: `renderTrace` text and the spans, `telemetry_find_metrics`;
+`locked: "never"`; deferred: the code-mode section names the namespace only, `describeNamespace("telemetry")` gives
+the declarations, so they take no place from the tools the agent uses all the time). Test: `telemetry-traces.test.ts`. Cost: Chord's (§30): a span per
+call, hold, method, relay and activation; nothing is measured or walked for it. The TUI records nothing. Test:
+`telemetry.test.ts`.
 
 ## Decisions
 
@@ -1373,7 +1406,13 @@ startup fencing, the list marker, owner notice, worker-filtered Show logs and re
   `SettingsSections` (`src/runtime/web-core.ts`) once, keyed by its sheet layer's name, with `label`, `title`,
   `order` (the list sorts by it, then by key), `Sheet` (renders its sheet while the route opens it; the app's layout
   keeps every one mounted, `SettingsSectionSheets` in `src/web/SettingsNav.tsx`) and optionally `Shown` (Voice: only
-  with a speech service). The section is that sheet's layer right above `settings`. While the window is open, every `Sheet` renders as a page in
+  with a speech service). The section is that sheet's layer right above `settings`. The owner's page holds the small
+  owner-only objects of the sections from its start, in components mounted all along, and hands the sections that
+  reference (a new `useObject` would be a new hold, a round trip): `Settings` and `ServerNameSettings` (the gear,
+  `HeldSettings`), `ProviderLogin` (the Providers slot), `Devices` (the Devices slot), `Discord` (`DiscordSheets`,
+  `held.ts`). Not held ahead: `Envs` and `Ports` (derived from the session catalog: re-sent as sessions change),
+  `Mcp` (the servers' tool lists), Logs (lines), Traces (calls only). Measured with a 150 ms round trip: General
+  470 ms → 20 ms, Discord 160 → 8 ms, Devices 326 → 160 ms (its token is a call). While the window is open, every `Sheet` renders as a page in
   its pane (`SettingsPane`, `src/web/settings-embed.ts`): its title and Back, no scrim or × of its own (the window's
   close everything), `sheet-body` kept for the plugin's styles. The same sheets opened elsewhere (Sign in to a
   provider, a session's logs or Discord link) stay sheets of their own.
@@ -1497,6 +1536,28 @@ startup fencing, the list marker, owner notice, worker-filtered Show logs and re
   restoring it when archived; the session's working spinner or unread dot on its corner); the sessions plugin's `DrawerRowsContext` (`plugins/sessions/contract.web.tsx`) gives it the
   rows, `SessionDot` and `listApart`, which leaves its session out of the rollups. The TUI lists it as an ordinary session. Tests:
   `familiar.test.ts`, `ui-familiar.test.ts`, the conversations actions in `conversations.test.ts`.
+- **Scope prompt** (`plugins/scope-prompt`, experiment; owner only, web only): an overlay (`overlay:` slots, the
+  `SlotList` at the end of `AppLayout`) that leaves the page as it is until pointing mode is on (`mode.ts`): a double tap
+  of the bare primary modifier (Cmd on macOS, Ctrl elsewhere: each press released within 300 ms, the second within
+  450 ms of the first, no other key, click or focus loss between, so Cmd+V sent by a dictation tool never counts), the
+  binding `p2.scope-prompt.toggle` (Cmd+.), the command menu's "Prompt anywhere", or its button (`Toggle.tsx`: in the
+  sidebar's header before the collapse button, the `sidebar-header:` slots; in the top bars of the chat and the list
+  pages while the sidebar is not shown docked, the `topbar-start:` slots), which also switches it off. Holding the modifier does nothing,
+  so Cmd+click still opens links in new tabs. While on, a pill says so, frames take no pointer events (they count as
+  their pane), the thing under the mouse is outlined with its chain of labels, and a click (touch too) is taken before
+  the page sees it and opens a small composer there, whose steps widen the scope (a touch: its tap outlines what it is
+  on, a second tap on that opens the composer; a drag scrolls as always); Escape, Stop, leaving the window or
+  the pick end the mode. `scopes.ts` reads the chain from attributes the page already renders: `.drawer`,
+  `.sidebar-section` and `.sidebar-group` `[data-key]`, `[data-session]` (session rows), `[data-view-pane]` with
+  `data-view-kind/-item/-title` (Workbench), `[data-path]` (a file of the changes view), `.diff-line`, `[data-entry]`
+  (transcript entries). Where it goes (`message.ts`; the composer's "To" switches): a target in the open session's
+  page (its chat, a view) goes to the open conversation as the person's message, as the composer sends it: the page
+  stages the `<scope>` block on the session (`ScopeStage`, worker facet, by `requestId`, dropped after a minute) and
+  the views' send router carries it with that message (`MessageContexts`, which now get the routed input), so the
+  transcript shows the text with the note "with scope Chat › Message". Anything else (the sidebar) goes to the
+  Familiar: opened as its logo does, the text queued on its main conversation followed by the block with the page's
+  session, conversation and title or list, which its prompt section explains. Not yet: frames' insides (an html
+  artifact is its pane). Test: `ui-scope-prompt.test.ts`.
 - **Subagents** (`plugins/subagents`): owns its protocol-independent Durable extension (persistent
   anchor conversations and exactly-once background reporter tasks, model/thinking/tool validation). The worker
   facet (an object of lifetime "host") contributes it to `Extensions` and catches up child metadata after relevant commits, retrying
